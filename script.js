@@ -569,9 +569,9 @@ function generateTestData() {
 
         if (!Array.isArray(state.entries)) state.entries = [];
 
-        // 全スロットに対して数名ずつ生成
+        // 全スロットに対して10名ずつ生成
         Object.keys(slots).forEach(slotId => {
-            const countToGen = 3 + Math.floor(Math.random() * 3); // 3〜5人ずつ
+            const countToGen = 10;
 
             for (let i = 0; i < countToGen; i++) {
                 const countInSlot = state.entries.filter(en => en.slotId === slotId).length;

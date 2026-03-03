@@ -703,3 +703,66 @@ hr {
     font-size: 0.85rem;
     transition: background 0.2s;
 }
+
+/* Slot Filters / Tabs */
+.slot-filters {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    padding-bottom: 10px;
+    -webkit-overflow-scrolling: touch;
+}
+
+.filter-btn {
+    white-space: nowrap;
+    padding: 6px 15px;
+    border-radius: 12px;
+    border: 1px solid var(--primary-pink);
+    background: white;
+    color: #ff80ab;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.filter-btn.active {
+    background: var(--primary-pink);
+    color: white;
+}
+
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+    .container {
+        padding: 10px;
+    }
+
+    .card {
+        padding: 1.2rem;
+    }
+
+    .pos-layout {
+        flex-direction: column;
+    }
+
+    .nav-links {
+        overflow-x: auto;
+        justify-content: flex-start;
+        padding-bottom: 5px;
+    }
+
+    .nav-btn {
+        white-space: nowrap;
+    }
+
+    .reception-table th,
+    .reception-table td {
+        padding: 8px 5px;
+        font-size: 0.82rem;
+    }
+}
+
+@media (min-width: 1024px) {
+    .container {
+        max-width: 1200px;
+    }
+}
