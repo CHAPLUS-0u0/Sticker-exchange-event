@@ -132,6 +132,7 @@ function initApp() {
     document.getElementById('search-input').addEventListener('input', updateReceptionList);
     document.getElementById('btn-export-csv').addEventListener('click', exportCSV);
     document.getElementById('btn-export-sales-csv').addEventListener('click', exportSalesCSV);
+    document.getElementById('btn-generate-test').addEventListener('click', generateTestData);
 
     // ---- 商品管理タブ ----
     initProductAdmin();
@@ -555,6 +556,41 @@ function handleNumberCheck() {
 
     numInput.value = '';
     numInput.focus();
+}
+
+// --- テストデータ生成 ---
+function generateTestData() {
+    const testNames = ["あきこ", "けんじ", "さくら", "ひろし", "ゆうき", "ななこ", "たくみ", "めぐみ", "かいと", "りな"];
+    const testSlots = ["slot1", "slot2", "slot4", "slot5"]; // 予約可能なスロット
+
+    if (state.entries.length > 50) {
+        alert("すでに十分なデータがあります。");
+        return;
+    }
+
+    testNames.forEach((name, i) => {
+        const slotId = testSlots[i % testSlots.length];
+        const countInSlot = state.entries.filter(en => en.slotId === slotId).length;
+        const nextNum = countInSlot + 1;
+        const formattedNum = String(nextNum).padStart(3, '0');
+
+        const entry = {
+            id: 'test_' + Date.now() + i,
+            slotId: slotId,
+            slotName: slots[slotId].name,
+            name: name + " (テスト)",
+            phone: `090-0000-${String(i).padStart(4, '0')}`,
+            number: formattedNum,
+            status: 'pending',
+            timestamp: new Date().toLocaleString()
+        };
+        state.entries.push(entry);
+    });
+
+    saveData();
+    populateSlotSelects();
+    updateReceptionList();
+    alert("テストデータを10件生成しました✨\n「名簿管理」タブで確認できます。");
 }
 
 
