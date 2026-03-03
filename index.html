@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ja">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>キラキラ✨シール交換会 受付</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700&family=Noto+Sans+JP:wght@400;700&display=swap"
+        rel="stylesheet">
+</head>
+
+<body>
+    <div class="yumekawa-bg"></div>
+
+    <!-- ログインモーダル (全体を覆う) -->
+    <div id="login-modal" class="modal">
+        <div class="modal-content card">
+            <h2>🔒 管理者ログイン</h2>
+            <p style="text-align:center; font-size:0.9rem; margin-bottom:1rem;">一般の方は専用の予約URLからアクセスしてください。</p>
+            <input type="password" id="login-password" placeholder="パスワードを入力">
+            <button id="btn-login" class="btn-primary w-100" style="margin-top:10px;">ログイン</button>
+        </div>
+    </div>
+
+    <nav class="navbar hidden" id="main-nav">
+        <div class="nav-container">
+            <h1 id="app-title-display">🎀 イベント名 🎀</h1>
+            <ul class="nav-links">
+                <li><button class="nav-btn active" data-target="pos-view">レジ・受付</button></li>
+                <li><button class="nav-btn" data-target="product-admin-view">商品管理</button></li>
+                <li><button class="nav-btn" data-target="registration-view">予約フォーム</button></li>
+                <li><button class="nav-btn" data-target="reception-view">名簿管理</button></li>
+                <li><button class="nav-btn" data-target="admin-view">設定</button></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main class="container" id="main-content" style="max-width: 1000px;">
+        <!-- POS View (レジ・受付) -->
+        <section id="pos-view" class="view active">
+            <div class="pos-layout">
+                <!-- 左側：人数カウントと商品 -->
+                <div class="pos-main">
+                    <!-- 時間枠人数カウンター -->
+                    <div class="card mb-3 p-3">
+                        <div class="pos-header">
+                            <h2>👥 人数カウンター (<span id="pos-current-slot-name">---</span>)</h2>
+                            <select id="pos-slot-select" class="slot-selector">
+                                <!-- JSで追加 -->
+                            </select>
+                        </div>
+                        <div class="counter-display">
+                            <button id="btn-count-minus" class="counter-btn minus">－1</button>
+                            <div class="count-number" id="pos-slot-count">0</div>
+                            <button id="btn-count-plus" class="counter-btn plus">＋1</button>
+                        </div>
+                    </div>
+
+                    <!-- 商品選択グリッド -->
+                    <div class="card p-3">
+                        <h2>🛍️ 商品</h2>
+                        <div id="product-grid" class="product-grid">
+                            <!-- JSで追加 -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右側：カートと会計 -->
+                <div class="pos-sidebar card p-3">
+                    <h2>🛒 カート</h2>
+                    <div id="cart-items" class="cart-items">
+                        <p class="placeholder-text">空っぽです</p>
+                    </div>
+                    <div class="cart-total">
+                        <span>合計</span>
+                        <span id="cart-total-price">¥0</span>
+                    </div>
+                    <button id="btn-checkout" class="btn-primary w-100 mb-3" disabled>会計する</button>
+                    <button id="btn-cart-clear" class="btn-secondary w-100">カートを空にする</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Product Admin View (商品管理) -->
+        <section id="product-admin-view" class="view">
+            <div class="card" style="max-width: 600px; margin: 0 auto;">
+                <div class="card-header">
+                    <h2>🏷️ 商品管理</h2>
+                </div>
+                <!-- 新規登録フォーム -->
+                <div class="form-group">
+                    <label>商品名</label>
+                    <input type="text" id="prod-name" placeholder="例：キラシール">
+                </div>
+                <div class="form-group">
+                    <label>値段 (円)</label>
+                    <input type="number" id="prod-price" placeholder="例：100">
+                </div>
+                <div class="form-group">
+                    <label>画像 (写真をとる / 選ぶ)</label>
+                    <input type="file" id="prod-img" accept="image/*">
+                    <img id="prod-img-preview" src=""
+                        style="max-width:100px; display:none; margin-top:10px; border-radius:10px;">
+                </div>
+                <button id="btn-add-product" class="btn-primary w-100 mb-4">商品を追加 / 更新</button>
+
+                <hr class="mb-4">
+
+                <!-- 登録済み商品一覧 -->
+                <h3>登録済み商品</h3>
+                <div id="admin-product-list" class="admin-product-list">
+                    <!-- JSで追加 -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Registration View (一般公開フォーム) -->
+        <section id="registration-view" class="view">
+            <div class="card" style="max-width: 600px; margin: 0 auto;">
+                <div class="card-header">
+                    <h2 id="form-title">📅 参加予約フォーム</h2>
+                    <p id="event-date-display" class="event-date"></p>
+                </div>
+                <form id="registration-form">
+                    <div class="form-group">
+                        <label for="reg-slot">希望の時間枠 <span class="required">*</span></label>
+                        <select id="reg-slot" required>
+                            <!-- JSで追加 -->
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="user-name">お名前 (ニックネーム可) <span class="required">*</span></label>
+                        <input type="text" id="user-name" required placeholder="例：あきちゃん">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="user-phone">電話番号 <span class="required">*</span></label>
+                        <input type="tel" id="user-phone" required placeholder="例：09000000000">
+                    </div>
+
+                    <button type="submit" class="btn-primary w-100">✨ 予約する ✨</button>
+                </form>
+
+                <div id="registration-result" class="result-area hidden">
+                    <div class="celebration">💖 予約完了 💖</div>
+                    <div class="result-card">
+                        <p class="result-slot" id="res-slot-txt"></p>
+                        <div class="number-badge">
+                            <span class="label">整理番号</span>
+                            <span id="res-number" class="number">---</span>
+                        </div>
+                    </div>
+                    <p class="warning-text">※この画面をスクリーンショットして当日お持ちください！</p>
+                    <button id="btn-reset-form" class="btn-secondary w-100">戻る</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Reception View (名簿管理) -->
+        <section id="reception-view" class="view">
+            <div class="card" style="max-width: 600px; margin: 0 auto;">
+                <div class="card-header">
+                    <h2>🔍 名簿・検索アシスタント</h2>
+                </div>
+                <div class="search-bar">
+                    <input type="text" id="search-input" placeholder="名前または番号で検索...">
+                </div>
+                <div class="reception-list" id="reception-list">
+                    <!-- Dynamic list items -->
+                    <p class="placeholder-text">データがありません</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Admin View (設定) -->
+        <section id="admin-view" class="view">
+            <div class="card" style="max-width: 600px; margin: 0 auto;">
+                <div class="card-header">
+                    <h2>⚙️ 管理者設定</h2>
+                    <p style="text-align:center; font-size:0.9rem; margin-bottom:1rem;">
+                        一般向け予約フォームURL：<br>
+                        <a href="?view=form" target="_blank" style="word-break: break-all;"
+                            id="public-form-url">?view=form</a>
+                    </p>
+                </div>
+
+                <div class="form-group">
+                    <label for="setting-event-name">イベント名</label>
+                    <input type="text" id="setting-event-name">
+                </div>
+                <div class="form-group">
+                    <label for="setting-event-date">開催日</label>
+                    <input type="text" id="setting-event-date" placeholder="例：3/15">
+                </div>
+                <button id="btn-save-settings" class="btn-primary w-100 mb-4">設定を保存</button>
+
+                <hr class="mb-4">
+
+                <div class="totals-display" style="text-align:center; margin-bottom:20px;">
+                    <h3>本日の売上: <strong id="today-sales-total"
+                            style="color:var(--primary-purple); font-size:1.5rem;">¥0</strong></h3>
+                </div>
+
+                <button id="btn-export-sales-csv" class="btn-outline w-100 mb-2">CSV出力 (売上履歴)</button>
+                <button id="btn-export-csv" class="btn-outline w-100 mb-4">CSV出力 (予約名簿)</button>
+
+                <button id="btn-clear-all" class="btn-danger w-100">全データを削除する (リセット)</button>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <p>&copy; 2026 シール交換会 実行委員会 <span id="admin-reveal-dot" class="admin-dot">.</span></p>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
