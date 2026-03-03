@@ -640,3 +640,66 @@ hr {
     background: var(--primary-pink);
     color: white;
 }
+
+/* Reception Table */
+.reception-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin-top: 10px;
+    background: white;
+    border-radius: 15px;
+    overflow: hidden;
+    border: 2px solid var(--primary-pink);
+}
+
+.reception-table th {
+    background: var(--primary-pink);
+    color: #ff80ab;
+    padding: 12px;
+    text-align: left;
+    font-size: 0.9rem;
+}
+
+.reception-table td {
+    padding: 12px;
+    border-bottom: 1px solid var(--primary-blue);
+    font-size: 0.95rem;
+    vertical-align: middle;
+}
+
+.reception-table tr:last-child td {
+    border-bottom: none;
+}
+
+.reception-table tr.checked-in {
+    background-color: #f5f5f5;
+    color: #999;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 10px;
+    font-size: 0.8rem;
+    font-weight: bold;
+}
+
+.status-pending {
+    background: var(--soft-yellow);
+    color: #fbc02d;
+}
+
+.status-checked {
+    background: #e0e0e0;
+    color: #757575;
+}
+
+.btn-checkin-sm {
+    padding: 6px 12px;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: background 0.2s;
+}
