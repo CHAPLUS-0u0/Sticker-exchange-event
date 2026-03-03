@@ -40,6 +40,7 @@ function loadData() {
         state = {
             ...state,
             ...parsed,
+            entries: parsed.entries || [],
             products: parsed.products || [],
             sales: parsed.sales || [],
             slotCounts: parsed.slotCounts || {},
