@@ -42,7 +42,7 @@ function loadData() {
             ...state,
             ...parsed,
             entries: parsed.entries || [],
-            products: parsed.products || [],
+            products: parsed.products || [], // ここに将来的にデフォルト値を merge できるようにする
             sales: parsed.sales || [],
             slotCounts: parsed.slotCounts || {},
             settings: { ...state.settings, ...(parsed.settings || {}) }
@@ -110,15 +110,22 @@ function initApp() {
         alert("設定を保存しました✨");
     });
     document.getElementById('btn-clear-all').addEventListener('click', () => {
-        if (confirm("本当に全てのデータを削除しますか？ (リセット)")) {
+        if (confirm("名簿データ、売上、人数カウントをリセットします。商品情報は消えません。よろしいですか？")) {
             state.entries = [];
-            state.products = [];
             state.sales = [];
             state.slotCounts = {};
             saveData();
             location.reload();
         }
     });
+
+    // 本当に全て（商品含め）消したい場合用の隠し機能（コンソール用など）
+    window.fullReset = () => {
+        if (confirm("商品情報も含め、全てのデータを完全に消去します。")) {
+            localStorage.removeItem('sticker_exchange_data');
+            location.reload();
+        }
+    };
 
     // ---- 予約フォーム ----
     populateSlotSelects();
