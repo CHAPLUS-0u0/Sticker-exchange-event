@@ -169,17 +169,30 @@
 
         <!-- Reception View (名簿管理) -->
         <section id="reception-view" class="view">
-            <div class="card" style="max-width: 600px; margin: 0 auto;">
+            <div class="card" style="max-width: 95%; margin: 0 auto; overflow-x: auto;">
                 <div class="card-header">
                     <h2>🔍 名簿・検索アシスタント</h2>
                 </div>
-                <div class="search-bar">
-                    <input type="text" id="search-input" placeholder="名前または番号で検索...">
+                <div class="reception-controls mb-3" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                    <input type="text" id="search-input" placeholder="名前または番号で検索..." style="flex: 1; min-width: 200px;">
+                    <button id="btn-export-reception-csv" class="btn-outline"
+                        style="padding: 10px 20px;">Excel/CSVで保存</button>
                 </div>
-                <div class="reception-list" id="reception-list">
-                    <!-- Dynamic list items -->
-                    <p class="placeholder-text">データがありません</p>
-                </div>
+                <table class="reception-table">
+                    <thead>
+                        <tr>
+                            <th>スロット</th>
+                            <th>番号</th>
+                            <th>お名前</th>
+                            <th>電話番号</th>
+                            <th>操作</th>
+                            <th>状態</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reception-list-body">
+                        <!-- JSで追加 -->
+                    </tbody>
+                </table>
             </div>
         </section>
 

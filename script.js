@@ -132,6 +132,7 @@ function initApp() {
     // ---- 受付（名簿）タブ ----
     document.getElementById('search-input').addEventListener('input', updateReceptionList);
     document.getElementById('btn-export-csv').addEventListener('click', exportCSV);
+    document.getElementById('btn-export-reception-csv').addEventListener('click', exportCSV);
     document.getElementById('btn-export-sales-csv').addEventListener('click', exportSalesCSV);
     document.getElementById('btn-generate-test').addEventListener('click', generateTestData);
 
@@ -561,46 +562,62 @@ function handleNumberCheck() {
 
 // --- テストデータ生成 ---
 function generateTestData() {
-    const testNames = ["あきこ", "けんじ", "さくら", "ひろし", "ゆうき", "ななこ", "たくみ", "めぐみ", "かいと", "りな"];
-    const testSlots = ["slot1", "slot2", "slot4", "slot5"]; // 予約可能なスロット
+    try {
+        console.log("Generating test data...");
+        const testNames = ["あきこ", "けんじ", "さくら", "ひろし", "ゆうき", "ななこ", "たくみ", "めぐみ", "かいと", "りな"];
+        const testSlots = ["slot1", "slot2", "slot4", "slot5"]; // 予約可能なスロット
 
-    if (state.entries.length > 50) {
-        alert("すでに十分なデータがあります。");
-        return;
+        // state.entries が何らかの理由で壊れていた場合のガード
+        if (!Array.isArray(state.entries)) {
+            state.entries = [];
+        }
+
+        if (state.entries.length > 50) {
+            alert("すでに十分なデータがあります。");
+            return;
+        }
+
+        testNames.forEach((name, i) => {
+            const slotId = testSlots[i % testSlots.length];
+            const countInSlot = state.entries.filter(en => en.slotId === slotId).length;
+            const nextNum = countInSlot + 1;
+            const formattedNum = String(nextNum).padStart(3, '0');
+
+            const entry = {
+                id: 'test_' + Date.now() + i,
+                slotId: slotId,
+                slotName: slots[slotId].name,
+                name: name + " (テスト)",
+                phone: `090-0000-${String(i).padStart(4, '0')}`,
+                number: formattedNum,
+                status: 'pending',
+                timestamp: new Date().toLocaleString()
+            };
+            state.entries.push(entry);
+        });
+
+        saveData();
+        populateSlotSelects();
+        updateReceptionList();
+        alert("テストデータを10名分生成しました✨\n「名簿管理」タブで確認できます。");
+    } catch (err) {
+        console.error("Generate error:", err);
+        alert("エラーが発生しました: " + err.message);
     }
-
-    testNames.forEach((name, i) => {
-        const slotId = testSlots[i % testSlots.length];
-        const countInSlot = state.entries.filter(en => en.slotId === slotId).length;
-        const nextNum = countInSlot + 1;
-        const formattedNum = String(nextNum).padStart(3, '0');
-
-        const entry = {
-            id: 'test_' + Date.now() + i,
-            slotId: slotId,
-            slotName: slots[slotId].name,
-            name: name + " (テスト)",
-            phone: `090-0000-${String(i).padStart(4, '0')}`,
-            number: formattedNum,
-            status: 'pending',
-            timestamp: new Date().toLocaleString()
-        };
-        state.entries.push(entry);
-    });
-
-    saveData();
-    populateSlotSelects();
-    updateReceptionList();
-    alert("テストデータを10件生成しました✨\n「名簿管理」タブで確認できます。");
 }
 
 
 // --- 名簿検索 (Reception) ---
 function updateReceptionList() {
-    const listContainer = document.getElementById('reception-list');
+    const listBody = document.getElementById('reception-list-body');
     const searchVal = document.getElementById('search-input').value.toLowerCase();
 
-    listContainer.innerHTML = '';
+    listBody.innerHTML = '';
+
+    if (!Array.isArray(state.entries) || state.entries.length === 0) {
+        listBody.innerHTML = '<tr><td colspan="6" class="placeholder-text" style="text-align:center;">データがありません</td></tr>';
+        return;
+    }
 
     const sortedEntries = [...state.entries].sort((a, b) => {
         if (a.slotId !== b.slotId) return a.slotId.localeCompare(b.slotId);
@@ -615,27 +632,30 @@ function updateReceptionList() {
     );
 
     if (filtered.length === 0) {
-        listContainer.innerHTML = '<p class="placeholder-text">見つかりませんでした</p>';
+        listBody.innerHTML = '<tr><td colspan="6" class="placeholder-text" style="text-align:center;">見つかりませんでした</td></tr>';
         return;
     }
 
     filtered.forEach(entry => {
-        const item = document.createElement('div');
-        item.className = `reception-item ${entry.status === 'checked-in' ? 'checked-in' : ''}`;
-        item.innerHTML = `
-            <div class="item-info">
-                <div class="slot-name">${entry.slotName}</div>
-                <div class="user-name">No.${entry.number} : ${entry.name}</div>
-                <div class="slot-name">TEL: ${entry.phone}</div>
-            </div>
-            <div class="item-actions">
-                <button class="btn-checkin" style="${entry.status === 'checked-in' ? 'background:#ccc; border:none; padding:5px;' : 'padding:5px;'}">
-                    ${entry.status === 'checked-in' ? '取消' : '受付済にする'}
+        const tr = document.createElement('tr');
+        if (entry.status === 'checked-in') tr.className = 'checked-in';
+
+        const statusLabel = entry.status === 'checked-in' ? '<span class="status-badge status-checked">受付済</span>' : '<span class="status-badge status-pending">未受付</span>';
+
+        tr.innerHTML = `
+            <td>${entry.slotName}</td>
+            <td>${entry.number}</td>
+            <td><strong>${entry.name}</strong></td>
+            <td>${entry.phone}</td>
+            <td>
+                <button class="btn-checkin-sm" style="background:${entry.status === 'checked-in' ? '#ccc' : 'var(--primary-pink)'}; color:${entry.status === 'checked-in' ? '#fff' : '#ff80ab'}">
+                    ${entry.status === 'checked-in' ? '取消' : '受付'}
                 </button>
-            </div>
+            </td>
+            <td>${statusLabel}</td>
         `;
-        item.querySelector('.btn-checkin').addEventListener('click', () => toggleCheckIn(entry.id));
-        listContainer.appendChild(item);
+        tr.querySelector('.btn-checkin-sm').addEventListener('click', () => toggleCheckIn(entry.id));
+        listBody.appendChild(tr);
     });
 }
 
@@ -661,15 +681,17 @@ function toggleCheckIn(id) {
 
 // --- CSV Exports ---
 function exportCSV() {
-    if (state.entries.length === 0) {
-        alert("データがありません");
+    if (!Array.isArray(state.entries) || state.entries.length === 0) {
+        alert("名簿データがありません");
         return;
     }
-    let csv = "\uFEFFスロット,整理番号,名前,電話番号,状態,登録時間\n";
+    // Excelで開いたときに文字化けしないための魔法のコード (\uFEFF)
+    let csv = "\uFEFFスロット,整理番号,お名前,電話番号,予約状態,登録日時\n";
     state.entries.forEach(en => {
-        csv += `"${en.slotName}","${en.number}","${en.name}","${en.phone}","${en.status}","${en.timestamp}"\n`;
+        const jStatus = en.status === 'checked-in' ? '受付済' : '未受付';
+        csv += `"${en.slotName}","${en.number}","${en.name}","${en.phone}","${jStatus}","${en.timestamp}"\n`;
     });
-    downloadBlob(csv, `名簿_${new Date().toLocaleDateString()}.csv`);
+    downloadBlob(csv, `名簿一覧_${new Date().toLocaleDateString('ja-JP').replace(/\//g, '-')}.csv`);
 }
 
 function exportSalesCSV() {
