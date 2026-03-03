@@ -10,7 +10,8 @@ let state = {
         eventDate: "2026/03/15",
         hpUrl: "https://chaplus-0u0.github.io/Sticker-exchange-event/",
         adminPassword: "admin"
-    }
+    },
+    currentSlotFilter: 'all'
 };
 
 let isAdminAuth = sessionStorage.getItem('sticker_admin_auth') === 'true';
@@ -563,43 +564,46 @@ function handleNumberCheck() {
 // --- テストデータ生成 ---
 function generateTestData() {
     try {
-        console.log("Generating test data...");
+        console.log("Generating enhanced test data...");
         const testNames = ["あきこ", "けんじ", "さくら", "ひろし", "ゆうき", "ななこ", "たくみ", "めぐみ", "かいと", "りな"];
-        const testSlots = ["slot1", "slot2", "slot4", "slot5"]; // 予約可能なスロット
 
-        // state.entries が何らかの理由で壊れていた場合のガード
-        if (!Array.isArray(state.entries)) {
-            state.entries = [];
-        }
+        if (!Array.isArray(state.entries)) state.entries = [];
 
-        if (state.entries.length > 50) {
-            alert("すでに十分なデータがあります。");
-            return;
-        }
+        // 全スロットに対して数名ずつ生成
+        Object.keys(slots).forEach(slotId => {
+            const countToGen = 3 + Math.floor(Math.random() * 3); // 3〜5人ずつ
 
-        testNames.forEach((name, i) => {
-            const slotId = testSlots[i % testSlots.length];
-            const countInSlot = state.entries.filter(en => en.slotId === slotId).length;
-            const nextNum = countInSlot + 1;
-            const formattedNum = String(nextNum).padStart(3, '0');
+            for (let i = 0; i < countToGen; i++) {
+                const countInSlot = state.entries.filter(en => en.slotId === slotId).length;
+                const nextNum = countInSlot + 1;
+                const formattedNum = String(nextNum).padStart(3, '0');
+                const randomName = testNames[Math.floor(Math.random() * testNames.length)];
 
-            const entry = {
-                id: 'test_' + Date.now() + i,
-                slotId: slotId,
-                slotName: slots[slotId].name,
-                name: name + " (テスト)",
-                phone: `090-0000-${String(i).padStart(4, '0')}`,
-                number: formattedNum,
-                status: 'pending',
-                timestamp: new Date().toLocaleString()
-            };
-            state.entries.push(entry);
+                const entry = {
+                    id: 'test_' + Date.now() + Math.random(),
+                    slotId: slotId,
+                    slotName: slots[slotId].name,
+                    name: randomName + " (テスト)",
+                    phone: `090-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}`,
+                    number: formattedNum,
+                    status: Math.random() > 0.7 ? 'checked-in' : 'pending', // 30%の確率で受付済
+                    timestamp: new Date().toLocaleString()
+                };
+
+                // 受付済みの場合はスロットカウントも増やす
+                if (entry.status === 'checked-in') {
+                    if (!state.slotCounts[slotId]) state.slotCounts[slotId] = 0;
+                    state.slotCounts[slotId]++;
+                }
+
+                state.entries.push(entry);
+            }
         });
 
         saveData();
         populateSlotSelects();
         updateReceptionList();
-        alert("テストデータを10名分生成しました✨\n「名簿管理」タブで確認できます。");
+        alert("全時間帯のテストデータを生成しました✨\n「名簿管理」でタブを切り替えて確認できます。");
     } catch (err) {
         console.error("Generate error:", err);
         alert("エラーが発生しました: " + err.message);
@@ -607,11 +611,43 @@ function generateTestData() {
 }
 
 
-// --- 名簿検索 (Reception) ---
+// --- 名簿検索 & フィルター (Reception) ---
+function updateReceptionFilters() {
+    const filterContainer = document.getElementById('slot-filters');
+    if (!filterContainer) return;
+
+    filterContainer.innerHTML = '';
+
+    // 「全て」ボタン
+    const allBtn = document.createElement('button');
+    allBtn.textContent = '全て';
+    allBtn.className = `filter-btn ${state.currentSlotFilter === 'all' ? 'active' : ''}`;
+    allBtn.onclick = () => {
+        state.currentSlotFilter = 'all';
+        updateReceptionFilters();
+        updateReceptionList();
+    };
+    filterContainer.appendChild(allBtn);
+
+    // 各スロットのボタン
+    Object.keys(slots).forEach(slotId => {
+        const btn = document.createElement('button');
+        btn.textContent = slots[slotId].name;
+        btn.className = `filter-btn ${state.currentSlotFilter === slotId ? 'active' : ''}`;
+        btn.onclick = () => {
+            state.currentSlotFilter = slotId;
+            updateReceptionFilters();
+            updateReceptionList();
+        };
+        filterContainer.appendChild(btn);
+    });
+}
+
 function updateReceptionList() {
     const listBody = document.getElementById('reception-list-body');
     const searchVal = document.getElementById('search-input').value.toLowerCase();
 
+    updateReceptionFilters(); // フィルターUIも同期
     listBody.innerHTML = '';
 
     if (!Array.isArray(state.entries) || state.entries.length === 0) {
@@ -619,17 +655,21 @@ function updateReceptionList() {
         return;
     }
 
+    // ソート
     const sortedEntries = [...state.entries].sort((a, b) => {
         if (a.slotId !== b.slotId) return a.slotId.localeCompare(b.slotId);
         return a.number.localeCompare(b.number);
     });
 
-    const filtered = sortedEntries.filter(en =>
-        en.name.toLowerCase().includes(searchVal) ||
-        (en.phone && en.phone.includes(searchVal)) ||
-        en.number.includes(searchVal) ||
-        en.slotName.includes(searchVal)
-    );
+    // フィルター (スロット + 検索ワード)
+    const filtered = sortedEntries.filter(en => {
+        const matchesSlot = state.currentSlotFilter === 'all' || en.slotId === state.currentSlotFilter;
+        const matchesSearch = en.name.toLowerCase().includes(searchVal) ||
+            (en.phone && en.phone.includes(searchVal)) ||
+            en.number.includes(searchVal) ||
+            en.slotName.includes(searchVal);
+        return matchesSlot && matchesSearch;
+    });
 
     if (filtered.length === 0) {
         listBody.innerHTML = '<tr><td colspan="6" class="placeholder-text" style="text-align:center;">見つかりませんでした</td></tr>';
