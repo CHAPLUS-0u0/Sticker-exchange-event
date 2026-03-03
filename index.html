@@ -222,6 +222,14 @@
                     <label for="setting-hp-url">ホームページURL</label>
                     <input type="url" id="setting-hp-url" placeholder="https://example.com">
                 </div>
+                <div class="form-group">
+                    <label for="setting-gas-url">クラウド同期 (Google GAS URL)</label>
+                    <input type="url" id="setting-gas-url" placeholder="https://script.google.com/macros/s/.../exec">
+                    <small style="color: #888;">※釣り大会アプリと同様のGAS URLを入力してください</small>
+                </div>
+                <div id="sync-status-area" class="mb-3" style="font-size: 0.85rem; text-align: right;">
+                    同期状態: <span id="sync-status">未設定</span>
+                </div>
                 <button id="btn-save-settings" class="btn-primary w-100 mb-4">設定を保存</button>
 
                 <hr class="mb-4">

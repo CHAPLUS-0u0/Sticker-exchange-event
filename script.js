@@ -9,9 +9,11 @@ let state = {
         eventName: "3/15 丹波ルロット",
         eventDate: "2026/03/15",
         hpUrl: "https://chaplus-0u0.github.io/Sticker-exchange-event/",
+        gasUrl: "", // Google Apps Script URL
         adminPassword: "admin"
     },
-    currentSlotFilter: 'all'
+    currentSlotFilter: 'all',
+    lastUpdated: 0 // 同期判定用タイムスタンプ
 };
 
 let isAdminAuth = sessionStorage.getItem('sticker_admin_auth') === 'true';
@@ -28,31 +30,87 @@ const slots = {
 };
 
 // --- Initialization ---
-document.addEventListener('DOMContentLoaded', () => {
-    loadData();
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadData();
     checkAccess();
     initApp();
 });
 
-function loadData() {
+async function loadData() {
+    // 1. ローカルから読み込み
     const saved = localStorage.getItem('sticker_exchange_data');
     if (saved) {
-        const parsed = JSON.parse(saved);
-        state = {
-            ...state,
-            ...parsed,
-            entries: parsed.entries || [],
-            products: parsed.products || [], // ここに将来的にデフォルト値を merge できるようにする
-            sales: parsed.sales || [],
-            slotCounts: parsed.slotCounts || {},
-            settings: { ...state.settings, ...(parsed.settings || {}) }
-        };
+        state = JSON.parse(saved);
+        // 後方互換性ガード
+        if (!state.settings) state.settings = {};
+    }
+
+    // 2. クラウド同期 (URLが設定されている場合)
+    if (state.settings.gasUrl) {
+        updateSyncStatus('syncing');
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000); // 8秒タイムアウト
+
+            const response = await fetch(`${state.settings.gasUrl}?action=get`, { signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            if (response.ok) {
+                const cloudData = await response.json();
+                if (cloudData && cloudData.lastUpdated) {
+                    const localTime = state.lastUpdated || 0;
+                    const cloudTime = cloudData.lastUpdated || 0;
+
+                    if (cloudTime > localTime) {
+                        console.log("Cloud data is newer. Updating local...");
+                        state = cloudData;
+                        localStorage.setItem('sticker_exchange_data', JSON.stringify(state));
+                    } else if (localTime > cloudTime) {
+                        console.log("Local data is newer. Syncing to cloud...");
+                        syncToCloud();
+                    }
+                }
+                updateSyncStatus('success');
+            }
+        } catch (e) {
+            console.warn("Cloud load failed:", e);
+            updateSyncStatus('error');
+        }
     }
 }
 
 function saveData() {
+    state.lastUpdated = Date.now();
     localStorage.setItem('sticker_exchange_data', JSON.stringify(state));
     updateTodaySales();
+    syncToCloud(); // バックグラウンドで送信
+}
+
+function updateSyncStatus(status) {
+    const el = document.getElementById('sync-status');
+    if (!el) return;
+    switch (status) {
+        case 'syncing': el.textContent = '🔄 同期中...'; el.style.color = '#ffa726'; break;
+        case 'success': el.textContent = '✅ 同期完了'; el.style.color = '#66bb6a'; break;
+        case 'error': el.textContent = '⚠️ 接続エラー'; el.style.color = '#ef5350'; break;
+        default: el.textContent = '未設定'; el.style.color = '#888';
+    }
+}
+
+async function syncToCloud() {
+    if (!state.settings.gasUrl) return;
+
+    try {
+        const response = await fetch(state.settings.gasUrl, {
+            method: 'POST',
+            body: JSON.stringify(state),
+            mode: 'no-cors' // GASの制約上、レスポンス取得が難しいため no-cors で送る
+        });
+        updateSyncStatus('success');
+    } catch (e) {
+        console.error("Sync to cloud failed:", e);
+        updateSyncStatus('error');
+    }
 }
 
 // アクセス制御
@@ -105,6 +163,7 @@ function initApp() {
         state.settings.eventName = document.getElementById('setting-event-name').value;
         state.settings.eventDate = document.getElementById('setting-event-date').value;
         state.settings.hpUrl = document.getElementById('setting-hp-url').value;
+        state.settings.gasUrl = document.getElementById('setting-gas-url').value;
         saveData();
         updateSettingsUI();
         alert("設定を保存しました✨");
@@ -160,6 +219,7 @@ function updateSettingsUI() {
     document.getElementById('setting-event-name').value = state.settings.eventName;
     document.getElementById('setting-event-date').value = state.settings.eventDate;
     document.getElementById('setting-hp-url').value = state.settings.hpUrl || "";
+    document.getElementById('setting-gas-url').value = state.settings.gasUrl || "";
 
     // フッターのHPリンク更新
     const footerHp = document.getElementById('footer-hp-link');
