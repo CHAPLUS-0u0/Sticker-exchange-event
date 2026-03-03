@@ -8,6 +8,7 @@ let state = {
         capacityPerSlot: 20,
         eventName: "3/15 丹波ルロット",
         eventDate: "2026/03/15",
+        hpUrl: "https://chaplus-0u0.github.io/Sticker-exchange-event/",
         adminPassword: "admin"
     }
 };
@@ -101,6 +102,7 @@ function initApp() {
     document.getElementById('btn-save-settings').addEventListener('click', () => {
         state.settings.eventName = document.getElementById('setting-event-name').value;
         state.settings.eventDate = document.getElementById('setting-event-date').value;
+        state.settings.hpUrl = document.getElementById('setting-hp-url').value;
         saveData();
         updateSettingsUI();
         alert("設定を保存しました✨");
@@ -136,6 +138,9 @@ function initApp() {
 
     // ---- POS（レジ）タブ ----
     initPOS();
+
+    // ---- 番号チェック連携 ----
+    document.getElementById('btn-pos-check-number').addEventListener('click', handleNumberCheck);
 }
 
 function updateSettingsUI() {
@@ -143,6 +148,16 @@ function updateSettingsUI() {
     document.getElementById('event-date-display').textContent = `📅 開催日: ${state.settings.eventDate}`;
     document.getElementById('setting-event-name').value = state.settings.eventName;
     document.getElementById('setting-event-date').value = state.settings.eventDate;
+    document.getElementById('setting-hp-url').value = state.settings.hpUrl || "";
+
+    // フッターのHPリンク更新
+    const footerHp = document.getElementById('footer-hp-link');
+    if (state.settings.hpUrl) {
+        footerHp.innerHTML = `<a href="${state.settings.hpUrl}" target="_blank" class="hp-link">🏠 ホームページはこちら</a>`;
+    } else {
+        footerHp.innerHTML = "";
+    }
+
     updateTodaySales();
 
     // 公開URLの生成と表示
@@ -175,13 +190,13 @@ function populateSlotSelects() {
 
     Object.keys(slots).forEach(key => {
         const slot = slots[key];
-        
+
         // 予約フォーム用
         const opt = document.createElement('option');
         opt.value = key;
         opt.textContent = `${slot.name} ${slot.type === 'pre' ? '(事前予約枠)' : '(当日枠: 事前予約不可)'}`;
         if (slot.type !== 'pre') opt.disabled = true;
-        
+
         // 定員チェック
         const countInSlot = state.entries.filter(en => en.slotId === key).length;
         if (countInSlot >= state.settings.capacityPerSlot) {
@@ -250,7 +265,7 @@ function initProductAdmin() {
         const file = e.target.files[0];
         if (file) {
             const reader = new FileReader();
-            reader.onload = function(event) {
+            reader.onload = function (event) {
                 pendingImageBase64 = event.target.result;
                 imgPreview.src = pendingImageBase64;
                 imgPreview.style.display = 'block';
@@ -260,6 +275,7 @@ function initProductAdmin() {
     });
 
     document.getElementById('btn-add-product').addEventListener('click', () => {
+        const id = document.getElementById('prod-id-editing').value;
         const name = document.getElementById('prod-name').value.trim();
         const price = parseInt(document.getElementById('prod-price').value);
 
@@ -268,25 +284,41 @@ function initProductAdmin() {
             return;
         }
 
-        const newProd = {
-            id: 'prod_' + Date.now(),
-            name: name,
-            price: price,
-            image: pendingImageBase64 || '' 
-        };
+        if (id) {
+            // 更新
+            const idx = state.products.findIndex(p => p.id === id);
+            if (idx !== -1) {
+                state.products[idx] = {
+                    ...state.products[idx],
+                    name: name,
+                    price: price,
+                    image: pendingImageBase64 || state.products[idx].image
+                };
+            }
+            document.getElementById('prod-id-editing').value = '';
+            document.getElementById('btn-add-product').textContent = "商品を追加 / 更新";
+        } else {
+            // 新規
+            const newProd = {
+                id: 'prod_' + Date.now(),
+                name: name,
+                price: price,
+                image: pendingImageBase64 || ''
+            };
+            state.products.push(newProd);
+        }
 
-        state.products.push(newProd);
         saveData();
-        
+
         // リセット
         document.getElementById('prod-name').value = '';
         document.getElementById('prod-price').value = '';
         imgInput.value = '';
         imgPreview.style.display = 'none';
         pendingImageBase64 = "";
-        
+
         updateAdminProductList();
-        alert("商品を追加しました✨");
+        alert(id ? "商品を更新しました✨" : "商品を追加しました✨");
     });
 }
 
@@ -302,7 +334,7 @@ function updateAdminProductList() {
     state.products.forEach(p => {
         const item = document.createElement('div');
         item.className = 'admin-product-item';
-        
+
         const imgSrc = p.image ? p.image : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="50" height="50"><rect width="50" height="50" fill="%23eee"/></svg>';
 
         item.innerHTML = `
@@ -311,14 +343,35 @@ function updateAdminProductList() {
                 <div class="name">${p.name}</div>
                 <div class="price">¥${p.price}</div>
             </div>
+            <button class="btn-checkin" style="background:#4fc3f7; border:none; color:white; padding:5px 10px; border-radius:10px; cursor:pointer;" onclick="editProduct('${p.id}')">編集</button>
             <button class="btn-checkin" style="background:#ff8a80; border:none; color:white; padding:5px 10px; border-radius:10px; cursor:pointer;" onclick="deleteProduct('${p.id}')">削除</button>
         `;
         list.appendChild(item);
     });
 }
 
-window.deleteProduct = function(id) {
-    if(confirm("この商品を削除しますか？")) {
+window.editProduct = function (id) {
+    const p = state.products.find(prod => prod.id === id);
+    if (!p) return;
+
+    document.getElementById('prod-id-editing').value = p.id;
+    document.getElementById('prod-name').value = p.name;
+    document.getElementById('prod-price').value = p.price;
+
+    const imgPreview = document.getElementById('prod-img-preview');
+    if (p.image) {
+        imgPreview.src = p.image;
+        imgPreview.style.display = 'block';
+    } else {
+        imgPreview.style.display = 'none';
+    }
+
+    document.getElementById('btn-add-product').textContent = "商品を更新する";
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+};
+
+window.deleteProduct = function (id) {
+    if (confirm("この商品を削除しますか？")) {
         state.products = state.products.filter(p => p.id !== id);
         saveData();
         updateAdminProductList();
@@ -329,7 +382,7 @@ window.deleteProduct = function(id) {
 // --- POS レジ & カウンター ---
 function initPOS() {
     const slotSelect = document.getElementById('pos-slot-select');
-    
+
     // スロット変更時
     slotSelect.addEventListener('change', () => {
         updatePOSCounterDisplay();
@@ -361,9 +414,9 @@ function initPOS() {
     // 会計
     document.getElementById('btn-checkout').addEventListener('click', () => {
         if (currentCart.length === 0) return;
-        
+
         const total = currentCart.reduce((sum, item) => sum + (item.price * item.qty), 0);
-        
+
         const sale = {
             id: 'sale_' + Date.now(),
             timestamp: new Date().toLocaleString(),
@@ -373,7 +426,7 @@ function initPOS() {
 
         state.sales.push(sale);
         saveData();
-        
+
         currentCart = [];
         updateCartUI();
         alert(`会計完了しました！\n合計: ¥${total}`);
@@ -386,7 +439,7 @@ function refreshPOS() {
     // 商品グリッドの描画
     const grid = document.getElementById('product-grid');
     grid.innerHTML = '';
-    
+
     if (state.products.length === 0) {
         grid.innerHTML = '<p class="placeholder-text" style="grid-column: 1/-1;">商品が登録されていません。<br>「商品管理」から追加してください。</p>';
     } else {
@@ -394,13 +447,13 @@ function refreshPOS() {
             const tile = document.createElement('div');
             tile.className = 'product-tile';
             const imgSrc = p.image ? p.image : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="%23eee"/></svg>';
-            
+
             tile.innerHTML = `
                 <img src="${imgSrc}" loading="lazy">
                 <div class="name">${p.name}</div>
                 <div class="price">¥${p.price}</div>
             `;
-            
+
             tile.addEventListener('click', () => addToCart(p));
             grid.appendChild(tile);
         });
@@ -412,7 +465,7 @@ function refreshPOS() {
 function updatePOSCounterDisplay() {
     const slotId = document.getElementById('pos-slot-select').value;
     if (!slotId) return;
-    
+
     document.getElementById('pos-current-slot-name').textContent = slots[slotId].name;
     const count = state.slotCounts[slotId] || 0;
     document.getElementById('pos-slot-count').textContent = count;
@@ -433,7 +486,7 @@ function addToCart(product) {
     updateCartUI();
 }
 
-window.removeFromCart = function(id) {
+window.removeFromCart = function (id) {
     currentCart = currentCart.filter(item => item.id !== id);
     updateCartUI();
 };
@@ -441,7 +494,7 @@ window.removeFromCart = function(id) {
 function updateCartUI() {
     const cartContainer = document.getElementById('cart-items');
     cartContainer.innerHTML = '';
-    
+
     let total = 0;
 
     if (currentCart.length === 0) {
@@ -469,7 +522,39 @@ function updateCartUI() {
 function updateTodaySales() {
     const total = state.sales.reduce((sum, sale) => sum + sale.total, 0);
     const el = document.getElementById('today-sales-total');
-    if(el) el.textContent = `¥${total.toLocaleString()}`;
+    if (el) el.textContent = `¥${total.toLocaleString()}`;
+}
+
+// --- 番号チェック & カウンター連携 ---
+function handleNumberCheck() {
+    const slotId = document.getElementById('pos-slot-select').value;
+    const numInput = document.getElementById('pos-check-number');
+    const inputVal = numInput.value.trim();
+
+    if (!inputVal) return;
+
+    // 1. 予約名簿から検索 (現在のスロット)
+    const entry = state.entries.find(en => en.slotId === slotId && en.number === inputVal);
+
+    if (entry) {
+        if (entry.status === 'checked-in') {
+            alert(`整理番号 ${inputVal} は既に受付済みです。`);
+        } else {
+            // 受付済みにする (toggleCheckIn がカウンターを更新する)
+            toggleCheckIn(entry.id);
+            alert(`予約確認: ${entry.name} 様を「受付済」にしました✨`);
+        }
+    } else {
+        // 2. 名簿にない場合 (当日整理券など)
+        if (!state.slotCounts[slotId]) state.slotCounts[slotId] = 0;
+        state.slotCounts[slotId]++;
+        saveData();
+        updatePOSCounterDisplay();
+        alert(`整理番号 ${inputVal} をカウントしました(+1)✨`);
+    }
+
+    numInput.value = '';
+    numInput.focus();
 }
 
 
@@ -520,9 +605,19 @@ function updateReceptionList() {
 function toggleCheckIn(id) {
     const entry = state.entries.find(e => e.id === id);
     if (entry) {
-        entry.status = entry.status === 'checked-in' ? 'pending' : 'checked-in';
+        const slotId = entry.slotId;
+        if (!state.slotCounts[slotId]) state.slotCounts[slotId] = 0;
+
+        if (entry.status === 'checked-in') {
+            entry.status = 'pending';
+            if (state.slotCounts[slotId] > 0) state.slotCounts[slotId]--;
+        } else {
+            entry.status = 'checked-in';
+            state.slotCounts[slotId]++;
+        }
         saveData();
         updateReceptionList();
+        updatePOSCounterDisplay();
     }
 }
 
