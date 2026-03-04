@@ -9,6 +9,8 @@ let state = {
         eventName: "3/15 丹波ルロット",
         eventDate: "2026/03/15",
         hpUrl: "https://chaplus-0u0.github.io/Sticker-exchange-event/",
+        formNotice: "事前予約は無料で受け付けています。\n当日は10時のイベント開始時から窓口で当日分の受付を行います！",
+        completionNotice: "※今回は無料でご参加いただけますが、次回以降は有料になる可能性があります。\n※当日スムーズにご案内できるようご協力をお願いいたします！",
         gasUrl: "", // Google Apps Script URL
         adminPassword: "admin"
     },
@@ -20,13 +22,13 @@ let isAdminAuth = sessionStorage.getItem('sticker_admin_auth') === 'true';
 let currentCart = [];
 
 const slots = {
-    slot1: { name: "10:00–10:30", type: "pre" },
-    slot2: { name: "10:45–11:15", type: "pre" },
-    slot3: { name: "11:30–12:00", type: "walk-in" },
-    slot4: { name: "12:15–12:45", type: "pre" },
-    slot5: { name: "13:00–13:30", type: "pre" },
-    slot6: { name: "13:45–14:15", type: "walk-in" },
-    slot7: { name: "14:30–15:00", type: "walk-in" }
+    slot1: { name: "10:00–10:30", prefix: "①", type: "pre" },
+    slot2: { name: "10:45–11:15", prefix: "②", type: "pre" },
+    slot3: { name: "11:30–12:00", prefix: "③", type: "walk-in" },
+    slot4: { name: "12:15–12:45", prefix: "④", type: "pre" },
+    slot5: { name: "13:00–13:30", prefix: "⑤", type: "pre" },
+    slot6: { name: "13:45–14:15", prefix: "⑥", type: "walk-in" },
+    slot7: { name: "14:30–15:00", prefix: "⑦", type: "walk-in" }
 };
 
 // --- Initialization ---
@@ -117,35 +119,80 @@ async function syncToCloud() {
 function checkAccess() {
     const urlParams = new URLSearchParams(window.location.search);
     const isFormView = urlParams.get('view') === 'form';
+    const isAdminViewReq = urlParams.get('view') === 'admin';
+
+    document.getElementById('login-modal').classList.add('hidden');
 
     if (isFormView) {
         // 一般公開フォームモード
-        document.getElementById('login-modal').classList.add('hidden');
         document.getElementById('main-nav').classList.add('hidden');
         switchView(null, 'registration-view');
+    } else if (isAdminAuth) {
+        // 管理者認証済み
+        document.getElementById('main-nav').classList.remove('hidden');
+        switchView(document.querySelector('[data-target="pos-view"]'), 'pos-view');
     } else {
-        // 管理者モード
-        if (isAdminAuth) {
-            document.getElementById('login-modal').classList.add('hidden');
-            document.getElementById('main-nav').classList.remove('hidden');
-            switchView(document.querySelector('[data-target="pos-view"]'), 'pos-view');
-        } else {
+        // 一般向けトップページ（デフォルト）
+        document.getElementById('main-nav').classList.add('hidden');
+        switchView(null, 'top-view');
+        // もし管理画面用URLパラメータ付きで来たが未認証の場合はログインモーダルだけ出す
+        if (isAdminViewReq) {
             document.getElementById('login-modal').classList.remove('hidden');
-            document.getElementById('main-nav').classList.add('hidden');
         }
     }
 }
 
 function initApp() {
-    // ---- ログイン ----
+    // ---- ログイン・ログアウト ----
     document.getElementById('btn-login').addEventListener('click', () => {
         const pw = document.getElementById('login-password').value;
+        if (!pw.trim()) {
+            alert("パスワードを入力してください");
+            return;
+        }
         if (pw === state.settings.adminPassword || pw === 'admin') {
             isAdminAuth = true;
             sessionStorage.setItem('sticker_admin_auth', 'true');
+            window.history.replaceState({}, document.title, window.location.pathname + '?view=admin');
             checkAccess();
         } else {
             alert("パスワードが違います😢");
+        }
+    });
+
+    if (document.getElementById('btn-logout')) {
+        document.getElementById('btn-logout').addEventListener('click', () => {
+            if (confirm("ログアウトしますか？")) {
+                isAdminAuth = false;
+                sessionStorage.removeItem('sticker_admin_auth');
+                location.href = window.location.pathname; // TOPへ戻る
+            }
+        });
+    }
+
+    // ---- TOPページ用アクション ----
+    if (document.getElementById('btn-go-reserve')) {
+        document.getElementById('btn-go-reserve').addEventListener('click', () => {
+            switchView(null, 'registration-view');
+            window.scrollTo(0, 0);
+        });
+    }
+
+    if (document.getElementById('admin-reveal-dot')) {
+        document.getElementById('admin-reveal-dot').addEventListener('click', () => {
+            document.getElementById('login-modal').classList.remove('hidden');
+        });
+    }
+
+    // ログインモーダル外側クリックで閉じる（ログインキャンセル）
+    document.getElementById('login-modal').addEventListener('click', (e) => {
+        if (e.target.id === 'login-modal') {
+            e.target.classList.add('hidden');
+            // 管理者ページを直接叩いた場合はTOPに戻す
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('view') === 'admin') {
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
         }
     });
 
@@ -163,6 +210,8 @@ function initApp() {
         state.settings.eventName = document.getElementById('setting-event-name').value;
         state.settings.eventDate = document.getElementById('setting-event-date').value;
         state.settings.hpUrl = document.getElementById('setting-hp-url').value;
+        state.settings.formNotice = document.getElementById('setting-form-notice').value;
+        state.settings.completionNotice = document.getElementById('setting-completion-notice').value;
         state.settings.gasUrl = document.getElementById('setting-gas-url').value;
         saveData();
         updateSettingsUI();
@@ -174,7 +223,13 @@ function initApp() {
             state.sales = [];
             state.slotCounts = {};
             saveData();
-            location.reload();
+
+            // クラウド同期対応のため、少し待ってからリロード（またはUI直接クリア）
+            alert("リセットが完了しました✨");
+            updateReceptionList();
+            updatePOSCounterDisplay();
+            updateTodaySales();
+            if (typeof refreshPOS === 'function') refreshPOS();
         }
     });
 
@@ -198,10 +253,15 @@ function initApp() {
 
     // ---- 受付（名簿）タブ ----
     document.getElementById('search-input').addEventListener('input', updateReceptionList);
+    const hideCheckedInCb = document.getElementById('filter-hide-checked-in');
+    if (hideCheckedInCb) {
+        hideCheckedInCb.addEventListener('change', updateReceptionList);
+    }
     document.getElementById('btn-export-csv').addEventListener('click', exportCSV);
     document.getElementById('btn-export-reception-csv').addEventListener('click', exportCSV);
     document.getElementById('btn-export-sales-csv').addEventListener('click', exportSalesCSV);
     document.getElementById('btn-generate-test').addEventListener('click', generateTestData);
+    document.getElementById('btn-generate-test-products').addEventListener('click', generateTestProducts);
 
     // ---- 商品管理タブ ----
     initProductAdmin();
@@ -219,14 +279,62 @@ function updateSettingsUI() {
     document.getElementById('setting-event-name').value = state.settings.eventName;
     document.getElementById('setting-event-date').value = state.settings.eventDate;
     document.getElementById('setting-hp-url').value = state.settings.hpUrl || "";
+    document.getElementById('setting-form-notice').value = state.settings.formNotice || "";
+    document.getElementById('setting-completion-notice').value = state.settings.completionNotice || "";
     document.getElementById('setting-gas-url').value = state.settings.gasUrl || "";
 
-    // フッターのHPリンク更新
+    // タブタイトル（<title>）の反映
+    document.title = state.settings.eventName ? `${state.settings.eventName}✨受付` : "シール交換会✨受付";
+
+    // TOPページの反映
+    if (document.getElementById('top-event-title')) {
+        document.getElementById('top-event-title').textContent = `🎀 ${state.settings.eventName} 🎀`;
+    }
+    if (document.getElementById('top-event-date')) {
+        document.getElementById('top-event-date').textContent = `📅 開催日: ${state.settings.eventDate}`;
+    }
+    const topNoticeArea = document.getElementById('top-notice-area');
+    if (topNoticeArea) {
+        if (state.settings.formNotice && state.settings.formNotice.trim() !== "") {
+            topNoticeArea.textContent = state.settings.formNotice;
+            topNoticeArea.style.display = 'block';
+        } else {
+            topNoticeArea.style.display = 'none';
+        }
+    }
+
+    // フッターのHP(SNS)リンク更新
     const footerHp = document.getElementById('footer-hp-link');
     if (state.settings.hpUrl) {
-        footerHp.innerHTML = `<a href="${state.settings.hpUrl}" target="_blank" class="hp-link">🏠 ホームページはこちら</a>`;
+        if (!footerHp.querySelector('a')) {
+            footerHp.innerHTML = `<a href="${state.settings.hpUrl}" target="_blank" class="hp-link">📱 イベントのSNS・リンクはこちら</a>`;
+        } else {
+            footerHp.querySelector('a').href = state.settings.hpUrl;
+        }
     } else {
         footerHp.innerHTML = "";
+    }
+
+    // 予約フォームの案内文言（TOPに置いたためフォーム上では非表示にする手もあるが、一旦両方に反映させる）
+    const formNoticeArea = document.getElementById('form-notice-area');
+    if (formNoticeArea) {
+        if (state.settings.formNotice && state.settings.formNotice.trim() !== "") {
+            formNoticeArea.textContent = state.settings.formNotice;
+            formNoticeArea.style.display = 'block';
+        } else {
+            formNoticeArea.style.display = 'none';
+        }
+    }
+
+    // 完了画面の案内文言
+    const completionNoticeArea = document.getElementById('completion-notice-area');
+    if (completionNoticeArea) {
+        if (state.settings.completionNotice && state.settings.completionNotice.trim() !== "") {
+            completionNoticeArea.textContent = state.settings.completionNotice;
+            completionNoticeArea.style.display = 'block';
+        } else {
+            completionNoticeArea.style.display = 'none';
+        }
     }
 
     updateTodaySales();
@@ -301,6 +409,7 @@ function handleRegistration(e) {
 
     const nextNum = countInSlot + 1;
     const formattedNum = String(nextNum).padStart(3, '0');
+    const displayNum = slots[selectedSlotId].prefix ? `${slots[selectedSlotId].prefix}-${formattedNum}` : formattedNum;
 
     const newEntry = {
         id: Date.now().toString(),
@@ -308,7 +417,7 @@ function handleRegistration(e) {
         slotName: slots[selectedSlotId].name,
         name: userName,
         phone: userPhone,
-        number: formattedNum,
+        number: displayNum,
         status: 'pending',
         timestamp: new Date().toLocaleString()
     };
@@ -476,11 +585,37 @@ function initPOS() {
         updatePOSCounterDisplay();
     });
 
+    // 手入力の追加
+    document.getElementById('btn-add-manual').addEventListener('click', () => {
+        const nameInput = document.getElementById('pos-manual-name').value.trim();
+        const priceInput = parseInt(document.getElementById('pos-manual-price').value, 10);
+        if (isNaN(priceInput) || priceInput < 0) {
+            alert("正しい金額を入力してください");
+            return;
+        }
+
+        const name = nameInput || "手入力商品";
+        currentCart.push({
+            id: 'manual_' + Date.now(),
+            name: name,
+            price: priceInput,
+            qty: 1
+        });
+
+        document.getElementById('pos-manual-name').value = '';
+        document.getElementById('pos-manual-price').value = '';
+        updateCartUI();
+    });
+
     // カートクリア
     document.getElementById('btn-cart-clear').addEventListener('click', () => {
         currentCart = [];
+        document.getElementById('cart-tendered-amount').value = '';
         updateCartUI();
     });
+
+    // お預かり金額の入力監視
+    document.getElementById('cart-tendered-amount').addEventListener('input', updateChangeCalculation);
 
     // 会計
     document.getElementById('btn-checkout').addEventListener('click', () => {
@@ -498,14 +633,22 @@ function initPOS() {
         state.sales.push(sale);
         saveData();
 
+        const tenderedInput = document.getElementById('cart-tendered-amount');
+        const tendered = parseInt(tenderedInput.value);
+        const changeText = (!isNaN(tendered) && tendered > total) ? `\nお預かり: ¥${tendered}\nおつり: ¥${tendered - total}` : `\nお渡し: 丁度 (¥${total})`;
+
         currentCart = [];
+        tenderedInput.value = '';
         updateCartUI();
-        alert(`会計完了しました！\n合計: ¥${total}`);
+        updateSalesHistoryUI(); // 履歴を更新
+        updateTodaySales(); // 今日の売上を更新
+        alert(`会計完了しました！\n合計: ¥${total}${changeText}`);
     });
 }
 
 function refreshPOS() {
     updatePOSCounterDisplay();
+    updateSalesHistoryUI();
 
     // 商品グリッドの描画
     const grid = document.getElementById('product-grid');
@@ -532,6 +675,47 @@ function refreshPOS() {
 
     updateCartUI();
 }
+
+function updateSalesHistoryUI() {
+    const tbody = document.getElementById('pos-sales-history-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    // 最新のものを上に表示するためリバースして最大30件表示
+    const recentSales = [...state.sales].reverse().slice(0, 30);
+
+    if (recentSales.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#999;">まだ売上がありません</td></tr>';
+        return;
+    }
+
+    recentSales.forEach(sale => {
+        const tr = document.createElement('tr');
+
+        let itemNames = sale.items.map(i => `${i.name}×${i.qty}`).join(', ');
+        if (itemNames.length > 20) itemNames = itemNames.substring(0, 20) + '...';
+
+        // HH:MM 形式の抽出 (簡易版)
+        const timeMatch = sale.timestamp.match(/\d{1,2}:\d{2}/) || [sale.timestamp];
+        const displayTime = timeMatch[0];
+
+        tr.innerHTML = `
+            <td>${displayTime}</td>
+            <td>${itemNames}<br><strong style="color:var(--primary-pink);">¥${sale.total}</strong></td>
+            <td><button class="btn-delete-entry" onclick="deleteSaleEntry('${sale.id}')" style="padding: 4px 8px; font-size: 0.8rem;">取消</button></td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+window.deleteSaleEntry = function (saleId) {
+    if (confirm("この売上を取り消しますか？\n（本日の売上合計からも減算されます）")) {
+        state.sales = state.sales.filter(s => s.id !== saleId);
+        saveData();
+        updateSalesHistoryUI();
+        updateTodaySales();
+    }
+};
 
 function updatePOSCounterDisplay() {
     const slotId = document.getElementById('pos-slot-select').value;
@@ -588,6 +772,42 @@ function updateCartUI() {
     }
 
     document.getElementById('cart-total-price').textContent = `¥${total}`;
+    updateChangeCalculation();
+}
+
+function updateChangeCalculation() {
+    const total = currentCart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+    const tenderedInput = document.getElementById('cart-tendered-amount');
+    const tendered = parseInt(tenderedInput.value);
+    const changeAmountEl = document.getElementById('cart-change-amount');
+    const btnCheckout = document.getElementById('btn-checkout');
+
+    if (total === 0) {
+        changeAmountEl.textContent = '¥0';
+        changeAmountEl.style.color = 'var(--primary-pink)';
+        btnCheckout.disabled = true;
+        return;
+    }
+
+    if (isNaN(tendered) || tenderedInput.value === '') {
+        // お預かり金額が未入力の場合はぴったりもらった想定
+        changeAmountEl.textContent = '¥0';
+        changeAmountEl.style.color = 'var(--primary-pink)';
+        btnCheckout.disabled = false;
+        return;
+    }
+
+    const change = tendered - total;
+
+    if (change < 0) {
+        changeAmountEl.textContent = '不足 ¥' + Math.abs(change);
+        changeAmountEl.style.color = '#ff8a80';
+        btnCheckout.disabled = true;
+    } else {
+        changeAmountEl.textContent = '¥' + change;
+        changeAmountEl.style.color = 'var(--primary-pink)';
+        btnCheckout.disabled = false;
+    }
 }
 
 function updateTodaySales() {
@@ -641,9 +861,19 @@ function generateTestData() {
             const countToGen = 10;
 
             for (let i = 0; i < countToGen; i++) {
-                const countInSlot = state.entries.filter(en => en.slotId === slotId).length;
-                const nextNum = countInSlot + 1;
+                // そのスロットの最大の番号を探して+1する (プレフィックス対応)
+                const existingInSlot = state.entries.filter(en => en.slotId === slotId);
+                let maxNum = 0;
+                existingInSlot.forEach(en => {
+                    // "①-001" のような形式から数字部分を取り出す
+                    const parts = en.number.split('-');
+                    const n = parseInt(parts.length > 1 ? parts[1] : parts[0], 10);
+                    if (!isNaN(n) && n > maxNum) maxNum = n;
+                });
+
+                const nextNum = maxNum + 1;
                 const formattedNum = String(nextNum).padStart(3, '0');
+                const displayNum = slots[slotId].prefix ? `${slots[slotId].prefix}-${formattedNum}` : formattedNum;
                 const randomName = testNames[Math.floor(Math.random() * testNames.length)];
 
                 const entry = {
@@ -652,7 +882,7 @@ function generateTestData() {
                     slotName: slots[slotId].name,
                     name: randomName + " (テスト)",
                     phone: `090-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}`,
-                    number: formattedNum,
+                    number: displayNum,
                     status: Math.random() > 0.7 ? 'checked-in' : 'pending', // 30%の確率で受付済
                     timestamp: new Date().toLocaleString()
                 };
@@ -673,6 +903,28 @@ function generateTestData() {
         alert("全時間帯のテストデータを生成しました✨\n「名簿管理」でタブを切り替えて確認できます。");
     } catch (err) {
         console.error("Generate error:", err);
+        alert("エラーが発生しました: " + err.message);
+    }
+}
+
+function generateTestProducts() {
+    try {
+        console.log("Generating test products...");
+        state.products = [
+            { id: 'test_prod_1', name: '✨ キラシール (レア)', price: 100, image: '' },
+            { id: 'test_prod_2', name: '🌸 お花シール', price: 50, image: '' },
+            { id: 'test_prod_3', name: '🐶 わんこシール', price: 50, image: '' },
+            { id: 'test_prod_4', name: '⭐ お星さまシール', price: 50, image: '' },
+            { id: 'test_prod_5', name: '🌈 レインボーセット', price: 300, image: '' }
+        ];
+
+        saveData();
+        updateAdminProductList();
+        refreshPOS();
+
+        alert("テスト用の商品データを5個登録しました！✨\n「商品管理」または「レジ・受付」のタブで確認できます。");
+    } catch (err) {
+        console.error("Generate products error:", err);
         alert("エラーが発生しました: " + err.message);
     }
 }
@@ -728,14 +980,17 @@ function updateReceptionList() {
         return a.number.localeCompare(b.number);
     });
 
-    // フィルター (スロット + 検索ワード)
+    // フィルター (スロット + 検索ワード + 受付済かどうか)
+    const hideCheckedIn = document.getElementById('filter-hide-checked-in') ? document.getElementById('filter-hide-checked-in').checked : false;
+
     const filtered = sortedEntries.filter(en => {
         const matchesSlot = state.currentSlotFilter === 'all' || en.slotId === state.currentSlotFilter;
-        const matchesSearch = en.name.toLowerCase().includes(searchVal) ||
-            (en.phone && en.phone.includes(searchVal)) ||
-            en.number.includes(searchVal) ||
-            en.slotName.includes(searchVal);
-        return matchesSlot && matchesSearch;
+        // 時間帯の文字列（例：10:00〜11:00）でも検索できるように
+        const searchTargetStr = `${en.name} ${en.phone || ''} ${en.number} ${en.slotName}`.toLowerCase();
+        const matchesSearch = searchTargetStr.includes(searchVal);
+        const matchesHideFilter = hideCheckedIn ? (en.status !== 'checked-in') : true;
+
+        return matchesSlot && matchesSearch && matchesHideFilter;
     });
 
     if (filtered.length === 0) {
@@ -755,15 +1010,40 @@ function updateReceptionList() {
             <td><strong>${entry.name}</strong></td>
             <td>${entry.phone}</td>
             <td>
-                <button class="btn-checkin-sm" style="background:${entry.status === 'checked-in' ? '#ccc' : 'var(--primary-pink)'}; color:${entry.status === 'checked-in' ? '#fff' : '#ff80ab'}">
-                    ${entry.status === 'checked-in' ? '取消' : '受付'}
-                </button>
+                <div style="display:flex; gap:5px; align-items:center;">
+                    <button class="btn-checkin-sm" style="background:${entry.status === 'checked-in' ? '#ccc' : 'var(--primary-pink)'}; color:${entry.status === 'checked-in' ? '#fff' : '#ff80ab'}">
+                        ${entry.status === 'checked-in' ? '取消' : '受付'}
+                    </button>
+                    <button class="btn-delete-entry" data-id="${entry.id}" style="background:none; border:none; color:#f44336; cursor:pointer; font-size:1.2rem; margin-left:10px;" title="名簿から削除">
+                        🗑️
+                    </button>
+                </div>
             </td>
             <td>${statusLabel}</td>
         `;
         tr.querySelector('.btn-checkin-sm').addEventListener('click', () => toggleCheckIn(entry.id));
+        tr.querySelector('.btn-delete-entry').addEventListener('click', (e) => {
+            deleteEntry(e.currentTarget.getAttribute('data-id'));
+        });
         listBody.appendChild(tr);
     });
+}
+
+function deleteEntry(id) {
+    if (confirm("本当にこの予約をキャンセル（名簿から削除）しますか？")) {
+        const idx = state.entries.findIndex(e => e.id === id);
+        if (idx !== -1) {
+            const entry = state.entries[idx];
+            // 受付済みの場合はカウントを減らす
+            if (entry.status === 'checked-in' && state.slotCounts[entry.slotId] > 0) {
+                state.slotCounts[entry.slotId]--;
+            }
+            state.entries.splice(idx, 1);
+            saveData();
+            updateReceptionList();
+            updatePOSCounterDisplay();
+        }
+    }
 }
 
 function toggleCheckIn(id) {

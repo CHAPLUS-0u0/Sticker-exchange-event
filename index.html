@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>キラキラ✨シール交換会 受付</title>
+    <title>シール交換会✨受付</title>
     <link rel="stylesheet" href="style.css">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,7 +17,7 @@
     <div class="yumekawa-bg"></div>
 
     <!-- ログインモーダル (全体を覆う) -->
-    <div id="login-modal" class="modal">
+    <div id="login-modal" class="modal hidden">
         <div class="modal-content card">
             <h2>🔒 管理者ログイン</h2>
             <p style="text-align:center; font-size:0.9rem; margin-bottom:1rem;">一般の方は専用の予約URLからアクセスしてください。</p>
@@ -30,18 +30,40 @@
         <div class="nav-container">
             <h1 id="app-title-display">🎀 イベント名 🎀</h1>
             <ul class="nav-links">
-                <li><button class="nav-btn active" data-target="pos-view">レジ・受付</button></li>
+                <li><button class="nav-btn" data-target="pos-view">レジ・受付</button></li>
                 <li><button class="nav-btn" data-target="product-admin-view">商品管理</button></li>
                 <li><button class="nav-btn" data-target="registration-view">予約フォーム</button></li>
                 <li><button class="nav-btn" data-target="reception-view">名簿管理</button></li>
                 <li><button class="nav-btn" data-target="admin-view">設定</button></li>
+                <li style="margin-left: auto;"><button id="btn-logout" class="nav-btn"
+                        style="color:var(--primary-pink); font-weight:bold;">🚪ログアウト</button></li>
             </ul>
         </div>
     </nav>
 
     <main class="container" id="main-content" style="max-width: 1000px;">
+        <!-- Top View (一般向けトップページ) -->
+        <section id="top-view" class="view active">
+            <div class="card" style="text-align: center; max-width: 600px; margin: 0 auto; padding: 2rem;">
+                <h1 style="color: var(--primary-pink); margin-bottom: 1rem;" id="top-event-title">🎀 イベント名 🎀</h1>
+                <p style="font-size: 1.1rem; color: #555; margin-bottom: 2rem;" id="top-event-date">📅 開催日: ---</p>
+
+                <div id="top-notice-area"
+                    style="background:#fffcf0; padding:15px; border-radius:10px; border:1px solid #ffd54f; text-align:left; margin-bottom:2rem; white-space:pre-wrap;">
+                    ここにイベントのお知らせ案内が表示されます✨
+                </div>
+
+                <div style="margin-bottom: 2rem;">
+                    <button id="btn-go-reserve" class="btn-primary"
+                        style="font-size: 1.3rem; padding: 15px 30px; width:100%; box-shadow: 0 4px 10px rgba(255,128,171,0.4);">💖
+                        予約フォームへすすむ</button>
+                    <p style="font-size: 0.9rem; color: #888; margin-top: 10px;">※当日の受付についてのご案内もこちらから確認できます</p>
+                </div>
+            </div>
+        </section>
+
         <!-- POS View (レジ・受付) -->
-        <section id="pos-view" class="view active">
+        <section id="pos-view" class="view">
             <div class="pos-layout">
                 <!-- 左側：人数カウントと商品 -->
                 <div class="pos-main">
@@ -65,11 +87,42 @@
                         </div>
                     </div>
 
+                    <!-- 手入力追加エリア -->
+                    <div class="card p-3 mb-3" style="border-left: 5px solid #ffcc80;">
+                        <h2>✍️ 手入力で追加</h2>
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <input type="text" id="pos-manual-name" placeholder="内容(任意)" style="flex:1;">
+                            <input type="number" id="pos-manual-price" placeholder="金額" style="width:100px;">
+                            <span>円</span>
+                            <button id="btn-add-manual" class="btn-primary"
+                                style="white-space:nowrap; padding: 10px 15px;">追加</button>
+                        </div>
+                    </div>
+
                     <!-- 商品選択グリッド -->
-                    <div class="card p-3">
-                        <h2>🛍️ 商品</h2>
+                    <div class="card p-3 mb-3">
+                        <h2>🛍️ 商品をタップして追加</h2>
                         <div id="product-grid" class="product-grid">
                             <!-- JSで追加 -->
+                        </div>
+                    </div>
+
+                    <!-- 売上履歴エリア -->
+                    <div class="card p-3 mt-3">
+                        <h2>📋 最近の売上履歴</h2>
+                        <div style="max-height: 200px; overflow-y: auto;">
+                            <table class="data-table w-100" style="font-size: 0.9rem;">
+                                <thead>
+                                    <tr>
+                                        <th>時間</th>
+                                        <th>内容(合計)</th>
+                                        <th>取消</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pos-sales-history-tbody">
+                                    <!-- JSで追加 -->
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -80,9 +133,23 @@
                     <div id="cart-items" class="cart-items">
                         <p class="placeholder-text">空っぽです</p>
                     </div>
-                    <div class="cart-total">
+                    <div class="cart-total" style="margin-bottom: 10px;">
                         <span>合計</span>
                         <span id="cart-total-price">¥0</span>
+                    </div>
+                    <div class="cart-tendered"
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px; font-weight: bold;">
+                        <span style="font-size: 1.1rem;">お預かり</span>
+                        <div style="display: flex; align-items: center;">
+                            <span style="font-size: 1.2rem; margin-right: 5px;">¥</span>
+                            <input type="number" id="cart-tendered-amount" placeholder="金額..."
+                                style="width: 100px; text-align: right; padding: 8px; border-radius: 10px; border: 2px solid var(--primary-blue);">
+                        </div>
+                    </div>
+                    <div class="cart-change"
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; font-weight: bold; font-size: 1.3rem;">
+                        <span>おつり</span>
+                        <span id="cart-change-amount" style="color: var(--primary-pink);">¥0</span>
                     </div>
                     <button id="btn-checkout" class="btn-primary w-100 mb-3" disabled>会計する</button>
                     <button id="btn-cart-clear" class="btn-secondary w-100">カートを空にする</button>
@@ -130,6 +197,9 @@
                 <div class="card-header">
                     <h2 id="form-title">📅 参加予約フォーム</h2>
                     <p id="event-date-display" class="event-date"></p>
+                    <div id="form-notice-area"
+                        style="font-size: 0.9rem; color: #555; background: #fffcf0; padding: 10px; border-radius: 10px; border: 1px solid #ffd54f; margin-bottom: 1rem; text-align: left; white-space: pre-wrap; display: none;">
+                    </div>
                 </div>
                 <form id="registration-form">
                     <div class="form-group">
@@ -162,6 +232,9 @@
                         </div>
                     </div>
                     <p class="warning-text">※この画面をスクリーンショットして当日お持ちください！</p>
+                    <div id="completion-notice-area"
+                        style="font-size: 0.9rem; color: #555; background: #f0f4ff; padding: 10px; border-radius: 10px; border: 1px solid #90caf9; margin-bottom: 1rem; text-align: left; white-space: pre-wrap; display: none;">
+                    </div>
                     <button id="btn-reset-form" class="btn-secondary w-100">戻る</button>
                 </div>
             </div>
@@ -173,8 +246,13 @@
                 <div class="card-header">
                     <h2>🔍 名簿・検索アシスタント</h2>
                 </div>
-                <div class="reception-controls mb-3" style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <div class="reception-controls mb-3"
+                    style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
                     <input type="text" id="search-input" placeholder="名前または番号で検索..." style="flex: 1; min-width: 200px;">
+                    <label style="display: flex; align-items: center; gap: 5px; font-weight: bold; cursor: pointer;">
+                        <input type="checkbox" id="filter-hide-checked-in" style="width: auto; margin: 0;">
+                        受付済を隠す
+                    </label>
                     <button id="btn-export-reception-csv" class="btn-outline"
                         style="padding: 10px 20px;">Excel/CSVで保存</button>
                 </div>
@@ -219,8 +297,18 @@
                     <input type="text" id="setting-event-date" placeholder="例：3/15">
                 </div>
                 <div class="form-group">
-                    <label for="setting-hp-url">ホームページURL</label>
-                    <input type="url" id="setting-hp-url" placeholder="https://example.com">
+                    <label for="setting-hp-url">SNS・リンク先URL</label>
+                    <input type="url" id="setting-hp-url" placeholder="https://instagram.com/...">
+                </div>
+                <div class="form-group">
+                    <label for="setting-form-notice">予約フォーム上の案内文言</label>
+                    <textarea id="setting-form-notice" rows="3" placeholder="例：事前予約は無料です。当日は10時から窓口で受付します。"
+                        style="width: 100%; padding: 10px; border-radius: 10px; border: 2px solid var(--primary-blue); outline: none; resize: vertical;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="setting-completion-notice">予約完了画面の案内文言</label>
+                    <textarea id="setting-completion-notice" rows="3" placeholder="例：スクショを忘れずに！次回以降は有料になる可能性があります。"
+                        style="width: 100%; padding: 10px; border-radius: 10px; border: 2px solid var(--primary-blue); outline: none; resize: vertical;"></textarea>
                 </div>
                 <div class="form-group">
                     <label for="setting-gas-url">クラウド同期 (Google GAS URL)</label>
@@ -242,7 +330,8 @@
                 <button id="btn-export-sales-csv" class="btn-outline w-100 mb-2">CSV出力 (売上履歴)</button>
                 <button id="btn-export-csv" class="btn-outline w-100 mb-4">CSV出力 (予約名簿)</button>
 
-                <button id="btn-generate-test" class="btn-secondary w-100 mb-2">テスト用データを10名分ずつ生成</button>
+                <button id="btn-generate-test-products" class="btn-secondary w-100 mb-2">テスト用商品を登録する</button>
+                <button id="btn-generate-test" class="btn-secondary w-100 mb-2">テスト用名簿データを10名分ずつ生成</button>
                 <button id="btn-clear-all" class="btn-danger w-100">名簿と売上データをリセットする</button>
             </div>
         </section>
