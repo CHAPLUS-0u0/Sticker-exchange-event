@@ -13,7 +13,7 @@ let state = {
         completionNotice: "※今回は無料でご参加いただけますが、次回以降は有料になる可能性があります。\n※当日スムーズにご案内できるようご協力をお願いいたします！",
         topNotice: "ここにイベントのお知らせ案内が表示されます✨",
         topImage: "",
-        gasUrl: "", // Google Apps Script URL
+        gasUrl: "https://script.google.com/macros/s/AKfycbxKqkvvSDLWc2M6NkxzyMJ9_8DWPspAfQWUB6fOi6gVRDRmgvW50V9jzrX1uNWDTa9k/exec", // Google Apps Script URL
         adminPassword: "admin"
     },
     currentSlotFilter: 'all',
@@ -47,6 +47,12 @@ async function loadData() {
         state = JSON.parse(saved);
         // 後方互換性ガード
         if (!state.settings) state.settings = {};
+    }
+
+    // ハードコードされたGAS URLを常に適用（各端末での初期設定不要にするため）
+    const HARDCODED_GAS_URL = "https://script.google.com/macros/s/AKfycbxKqkvvSDLWc2M6NkxzyMJ9_8DWPspAfQWUB6fOi6gVRDRmgvW50V9jzrX1uNWDTa9k/exec";
+    if (state.settings) {
+        state.settings.gasUrl = HARDCODED_GAS_URL;
     }
 
     // 2. クラウド同期 (URLが設定されている場合)
