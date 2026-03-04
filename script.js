@@ -870,16 +870,24 @@ function handleNumberCheck() {
 
     if (!inputVal) return;
 
-    // 1. 予約名簿から検索 (現在のスロット)
-    const entry = state.entries.find(en => en.slotId === slotId && en.number === inputVal);
+    // 「001」や「1」などの入力に対して、現在の時間帯のプレフィックス（例：①-）を自動で補う
+    const formattedInput = inputVal.padStart(3, '0'); // "1" -> "001"
+    const prefix = slots[slotId] && slots[slotId].prefix ? `${slots[slotId].prefix}-` : "";
+    const searchObjNumber = prefix + formattedInput;
+
+    // 1. 予約名簿から検索 (現在の時間帯のスロット内でのみ探すので、他の時間帯の人は絶対に出ない)
+    const entry = state.entries.find(en =>
+        en.slotId === slotId &&
+        (en.number === inputVal || en.number === searchObjNumber || en.number.endsWith(formattedInput))
+    );
 
     if (entry) {
         if (entry.status === 'checked-in') {
-            alert(`整理番号 ${inputVal} は既に受付済みです。`);
+            alert(`整理番号 ${entry.number} は既に受付済みです。`);
         } else {
             // 受付済みにする (toggleCheckIn がカウンターを更新する)
             toggleCheckIn(entry.id);
-            alert(`予約確認: ${entry.name} 様を「受付済」にしました✨`);
+            alert(`予約確認: ${entry.name} 様（${entry.number}）を「受付済」にしました✨`);
         }
     } else {
         // 2. 名簿にない場合 (当日整理券など)
@@ -887,7 +895,7 @@ function handleNumberCheck() {
         state.slotCounts[slotId]++;
         saveData();
         updatePOSCounterDisplay();
-        alert(`整理番号 ${inputVal} をカウントしました(+1)✨`);
+        alert(`整理番号 ${inputVal} を当日分としてカウントしました(+1)✨`);
     }
 
     numInput.value = '';
