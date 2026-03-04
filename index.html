@@ -361,6 +361,21 @@
 
                 <hr class="mb-4">
 
+                <div class="card p-3 mb-4" style="background-color: #f8f9fa; border: 2px dashed #ccc;">
+                    <h3 style="margin-bottom: 10px;">💾 データのお引越し（バックアップ／復元）</h3>
+                    <p style="font-size: 0.9rem; color: #666; margin-bottom: 15px;">
+                        別の端末（iPadなど）へデータを移す場合は、ここで「データを保存」し、移動先の端末で「読み込み」してください。<br>
+                        ※商品画像、予約名簿、売上など全ての設定データが含まれます。
+                    </p>
+                    <button id="btn-export-backup" class="btn-primary w-100 mb-2"
+                        style="background-color: var(--primary-blue);">📤 全データを保存する (.json)</button>
+                    <label class="btn-outline w-100"
+                        style="display: block; text-align: center; cursor: pointer; margin-bottom: 0;">
+                        📥 保存したデータを読み込む (復元)
+                        <input type="file" id="input-import-backup" accept=".json" style="display: none;">
+                    </label>
+                </div>
+
                 <button id="btn-export-csv" class="btn-outline w-100 mb-4">📥 CSV出力 (予約名簿)</button>
 
                 <button id="btn-generate-test-products" class="btn-secondary w-100 mb-2">テスト用商品を登録する</button>

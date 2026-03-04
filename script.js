@@ -241,6 +241,52 @@ function initApp() {
         updateSettingsUI();
     });
 
+    // ---- データ・バックアップ復元 ----
+    document.getElementById('btn-export-backup').addEventListener('click', () => {
+        const dataStr = JSON.stringify(state, null, 2);
+        const blob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const dateStr = new Date().toISOString().slice(0, 10);
+        a.download = `sticker_exchange_backup_${dateStr}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+
+    document.getElementById('input-import-backup').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        if (!confirm("データを復元すると、現在のiPad(この端末)の中身は全て消えてバックアップの内容に上書きされます。よろしいですか？")) {
+            e.target.value = ''; // 選択クリア
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+            try {
+                const importedData = JSON.parse(evt.target.result);
+                // 簡単なデータ整合性チェック
+                if (importedData && typeof importedData === 'object' && importedData.settings) {
+                    state = importedData;
+                    saveData();
+                    alert("✅ データの復元が完了しました！\n画面を再読み込みします。");
+                    location.reload();
+                } else {
+                    alert('❌ 無効なデータファイルです。シール交換会アプリのバックアップファイルを選んでください。');
+                }
+            } catch (err) {
+                console.error(err);
+                alert("❌ ファイルの読み込み中にエラーが発生しました。");
+            }
+            e.target.value = ''; // リセット
+        };
+        reader.readAsText(file);
+    });
+
     document.getElementById('btn-clear-all').addEventListener('click', () => {
         if (confirm("名簿データ、売上、人数カウントをリセットします。商品情報は消えません。よろしいですか？")) {
             state.entries = [];
