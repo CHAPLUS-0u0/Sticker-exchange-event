@@ -11,6 +11,8 @@ let state = {
         hpUrl: "https://chaplus-0u0.github.io/Sticker-exchange-event/",
         formNotice: "事前予約は無料で受け付けています。\n当日は10時のイベント開始時から窓口で当日分の受付を行います！",
         completionNotice: "※今回は無料でご参加いただけますが、次回以降は有料になる可能性があります。\n※当日スムーズにご案内できるようご協力をお願いいたします！",
+        topNotice: "ここにイベントのお知らせ案内が表示されます✨",
+        topImage: "",
         gasUrl: "", // Google Apps Script URL
         adminPassword: "admin"
     },
@@ -118,24 +120,25 @@ async function syncToCloud() {
 // アクセス制御
 function checkAccess() {
     const urlParams = new URLSearchParams(window.location.search);
-    const isFormView = urlParams.get('view') === 'form';
     const isAdminViewReq = urlParams.get('view') === 'admin';
 
     document.getElementById('login-modal').classList.add('hidden');
 
-    if (isFormView) {
-        // 一般公開フォームモード
-        document.getElementById('main-nav').classList.add('hidden');
-        switchView(null, 'registration-view');
-    } else if (isAdminAuth) {
+    if (isAdminAuth && !isAdminViewReq) {
         // 管理者認証済み
         document.getElementById('main-nav').classList.remove('hidden');
         switchView(document.querySelector('[data-target="pos-view"]'), 'pos-view');
+    } else if (isAdminAuth && isAdminViewReq) {
+        // auth済みかつadmin直指定時
+        document.getElementById('main-nav').classList.remove('hidden');
+        switchView(document.querySelector('[data-target="pos-view"]'), 'pos-view');
+        // ※URLパラメータを消す処理はinitAppのlogin内にあるが、直リン時に消すのは省略
     } else {
-        // 一般向けトップページ（デフォルト）
+        // 一般向けトップページ（通常・?view=form問わず、未設定時はすべてここ）
         document.getElementById('main-nav').classList.add('hidden');
         switchView(null, 'top-view');
-        // もし管理画面用URLパラメータ付きで来たが未認証の場合はログインモーダルだけ出す
+
+        // 管理画面へ直通URLを踏んだ場合のみログイン画面を出す
         if (isAdminViewReq) {
             document.getElementById('login-modal').classList.remove('hidden');
         }
@@ -210,6 +213,7 @@ function initApp() {
         state.settings.eventName = document.getElementById('setting-event-name').value;
         state.settings.eventDate = document.getElementById('setting-event-date').value;
         state.settings.hpUrl = document.getElementById('setting-hp-url').value;
+        state.settings.topNotice = document.getElementById('setting-top-notice').value;
         state.settings.formNotice = document.getElementById('setting-form-notice').value;
         state.settings.completionNotice = document.getElementById('setting-completion-notice').value;
         state.settings.gasUrl = document.getElementById('setting-gas-url').value;
@@ -217,6 +221,26 @@ function initApp() {
         updateSettingsUI();
         alert("設定を保存しました✨");
     });
+
+    // TOP画像アップロード処理
+    document.getElementById('setting-top-img').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                state.settings.topImage = evt.target.result;
+                updateSettingsUI();
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    document.getElementById('btn-clear-top-img').addEventListener('click', () => {
+        state.settings.topImage = "";
+        document.getElementById('setting-top-img').value = "";
+        updateSettingsUI();
+    });
+
     document.getElementById('btn-clear-all').addEventListener('click', () => {
         if (confirm("名簿データ、売上、人数カウントをリセットします。商品情報は消えません。よろしいですか？")) {
             state.entries = [];
@@ -279,6 +303,7 @@ function updateSettingsUI() {
     document.getElementById('setting-event-name').value = state.settings.eventName;
     document.getElementById('setting-event-date').value = state.settings.eventDate;
     document.getElementById('setting-hp-url').value = state.settings.hpUrl || "";
+    document.getElementById('setting-top-notice').value = state.settings.topNotice || "";
     document.getElementById('setting-form-notice').value = state.settings.formNotice || "";
     document.getElementById('setting-completion-notice').value = state.settings.completionNotice || "";
     document.getElementById('setting-gas-url').value = state.settings.gasUrl || "";
@@ -293,14 +318,35 @@ function updateSettingsUI() {
     if (document.getElementById('top-event-date')) {
         document.getElementById('top-event-date').textContent = `📅 開催日: ${state.settings.eventDate}`;
     }
+
+    // TOPページの案内と画像の反映
     const topNoticeArea = document.getElementById('top-notice-area');
     if (topNoticeArea) {
-        if (state.settings.formNotice && state.settings.formNotice.trim() !== "") {
-            topNoticeArea.textContent = state.settings.formNotice;
+        if (state.settings.topNotice && state.settings.topNotice.trim() !== "") {
+            topNoticeArea.textContent = state.settings.topNotice;
             topNoticeArea.style.display = 'block';
         } else {
             topNoticeArea.style.display = 'none';
         }
+    }
+
+    const topImgView = document.getElementById('top-view-image');
+    const topImgPreview = document.getElementById('setting-top-img-preview');
+    const topImgClearBtn = document.getElementById('btn-clear-top-img');
+    if (state.settings.topImage) {
+        if (topImgView) {
+            topImgView.src = state.settings.topImage;
+            topImgView.style.display = 'block';
+        }
+        if (topImgPreview) {
+            topImgPreview.src = state.settings.topImage;
+            topImgPreview.style.display = 'block';
+            topImgClearBtn.style.display = 'inline-block';
+        }
+    } else {
+        if (topImgView) topImgView.style.display = 'none';
+        if (topImgPreview) topImgPreview.style.display = 'none';
+        if (topImgClearBtn) topImgClearBtn.style.display = 'none';
     }
 
     // フッターのHP(SNS)リンク更新

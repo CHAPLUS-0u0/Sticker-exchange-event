@@ -46,7 +46,10 @@
         <section id="top-view" class="view active">
             <div class="card" style="text-align: center; max-width: 600px; margin: 0 auto; padding: 2rem;">
                 <h1 style="color: var(--primary-pink); margin-bottom: 1rem;" id="top-event-title">🎀 イベント名 🎀</h1>
-                <p style="font-size: 1.1rem; color: #555; margin-bottom: 2rem;" id="top-event-date">📅 開催日: ---</p>
+                <p style="font-size: 1.1rem; color: #555; margin-bottom: 1.5rem;" id="top-event-date">📅 開催日: ---</p>
+
+                <img id="top-view-image" src="" alt="イベント画像"
+                    style="width:100%; max-height:400px; object-fit:contain; border-radius:10px; margin-bottom:1.5rem; display:none; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
 
                 <div id="top-notice-area"
                     style="background:#fffcf0; padding:15px; border-radius:10px; border:1px solid #ffd54f; text-align:left; margin-bottom:2rem; white-space:pre-wrap;">
@@ -287,6 +290,24 @@
                             id="public-form-url">?view=form</a>
                     </p>
                 </div>
+
+                <hr class="my-4">
+                <h3 style="margin-bottom: 1rem;">🖼️ TOPページ設定</h3>
+                <div class="form-group">
+                    <label for="setting-top-notice">TOPページの案内・お知らせ文章</label>
+                    <textarea id="setting-top-notice" rows="4" placeholder="イベントの概要や挨拶などを自由に記入できます"
+                        style="width: 100%; padding: 10px; border-radius: 10px; border: 2px solid var(--primary-blue); outline: none; resize: vertical;"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>TOPページの画像 (ポスターなど)</label>
+                    <input type="file" id="setting-top-img" accept="image/*" class="w-100"
+                        style="padding: 10px; border: 1px dashed #ccc; background: #fafafa; border-radius: 5px;">
+                    <img id="setting-top-img-preview" src=""
+                        style="width:100%; max-height:200px; object-fit:contain; margin-top:10px; display:none; background:#f0f0f0;">
+                    <button id="btn-clear-top-img" class="btn-outline mt-2"
+                        style="font-size:0.8rem; padding: 5px 10px; display:none;">画像を削除</button>
+                </div>
+                <hr class="my-4" style="margin-top: 2rem; margin-bottom: 2rem;">
 
                 <div class="form-group">
                     <label for="setting-event-name">イベント名</label>
