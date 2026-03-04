@@ -443,11 +443,9 @@ hr {
 /* Product Grid */
 .product-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
     gap: 15px;
     margin-top: 15px;
-    max-height: 35vh;
-    overflow-y: auto;
     padding-right: 5px;
     /* スクロールバー用の余白 */
 }
@@ -497,23 +495,14 @@ hr {
 .pos-sidebar {
     display: flex;
     flex-direction: column;
-    height: 100%;
-    min-height: 500px;
-}
-
-.pos-sidebar {
-    position: sticky;
-    top: 20px;
-    align-self: start;
 }
 
 .cart-items {
     flex-grow: 1;
     overflow-y: auto;
     margin-bottom: 20px;
-    min-height: 200px;
-    max-height: 35vh;
-    /* iPad等で縦に伸びすぎるのを防ぐ */
+    min-height: 0;
+    /* 高さを親に追従させるため */
     background: #fafafa;
     border-radius: 10px;
     padding: 10px;
