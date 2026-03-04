@@ -404,6 +404,10 @@ function switchView(btn, targetId) {
     if (targetId === 'reception-view') updateReceptionList();
     if (targetId === 'pos-view') refreshPOS();
     if (targetId === 'product-admin-view') updateAdminProductList();
+    if (targetId === 'sales-view') {
+        updateSalesHistoryUI();
+        updateTodaySales();
+    }
 }
 
 // --- 予約フォーム ---
@@ -770,6 +774,29 @@ function updatePOSCounterDisplay() {
     document.getElementById('pos-current-slot-name').textContent = slots[slotId].name;
     const count = state.slotCounts[slotId] || 0;
     document.getElementById('pos-slot-count').textContent = count;
+
+    updatePOSSuggestions();
+}
+
+function updatePOSSuggestions() {
+    const slotId = document.getElementById('pos-slot-select').value;
+    const datalist = document.getElementById('pos-number-suggestions');
+    if (!datalist) return;
+    datalist.innerHTML = '';
+
+    if (!slotId) return;
+
+    // 現在の時間帯で、まだ未受付の人だけを抽出
+    const unCheckedEntries = state.entries.filter(en => en.slotId === slotId && en.status !== 'checked-in');
+
+    // 入力候補として追加
+    unCheckedEntries.forEach(entry => {
+        const option = document.createElement('option');
+        // valueを実際の番号（①-001など）にし、ラベルに名前を出します
+        option.value = entry.number;
+        option.textContent = `${entry.name} 様`;
+        datalist.appendChild(option);
+    });
 }
 
 function addToCart(product) {
@@ -888,6 +915,7 @@ function handleNumberCheck() {
             // 受付済みにする (toggleCheckIn がカウンターを更新する)
             toggleCheckIn(entry.id);
             alert(`予約確認: ${entry.name} 様（${entry.number}）を「受付済」にしました✨`);
+            updatePOSSuggestions(); // サジェストリストからも削除
         }
     } else {
         // 2. 名簿にない場合 (当日整理券など)

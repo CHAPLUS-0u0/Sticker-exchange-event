@@ -32,6 +32,7 @@
             <ul class="nav-links">
                 <li><button class="nav-btn" data-target="top-view">🏠 お客様用TOP</button></li>
                 <li><button class="nav-btn" data-target="pos-view">レジ・受付</button></li>
+                <li><button class="nav-btn" data-target="sales-view">📈 売上管理</button></li>
                 <li><button class="nav-btn" data-target="product-admin-view">商品管理</button></li>
                 <li><button class="nav-btn" data-target="registration-view">予約フォーム</button></li>
                 <li><button class="nav-btn" data-target="reception-view">名簿管理</button></li>
@@ -86,7 +87,9 @@
                         </div>
                         <!-- 番号チェック追加 -->
                         <div class="pos-check-area mt-3">
-                            <input type="text" id="pos-check-number" placeholder="番号(例: 001)" class="w-100 mb-2">
+                            <input type="text" id="pos-check-number" placeholder="番号(例: 001)"
+                                list="pos-number-suggestions" class="w-100 mb-2">
+                            <datalist id="pos-number-suggestions"></datalist>
                             <button id="btn-pos-check-number" class="btn-primary w-100">番号でチェック</button>
                         </div>
                     </div>
@@ -108,25 +111,6 @@
                         <h2>🛍️ 商品をタップして追加</h2>
                         <div id="product-grid" class="product-grid">
                             <!-- JSで追加 -->
-                        </div>
-                    </div>
-
-                    <!-- 売上履歴エリア -->
-                    <div class="card p-3 mt-3">
-                        <h2>📋 最近の売上履歴</h2>
-                        <div style="max-height: 200px; overflow-y: auto;">
-                            <table class="data-table w-100" style="font-size: 0.9rem;">
-                                <thead>
-                                    <tr>
-                                        <th>時間</th>
-                                        <th>内容(合計)</th>
-                                        <th>取消</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="pos-sales-history-tbody">
-                                    <!-- JSで追加 -->
-                                </tbody>
-                            </table>
                         </div>
                     </div>
                 </div>
@@ -280,6 +264,39 @@
             </div>
         </section>
 
+        <!-- Sales View (売上管理) -->
+        <section id="sales-view" class="view">
+            <div class="card" style="max-width: 800px; margin: 0 auto; overflow-x: auto;">
+                <div class="card-header">
+                    <h2>📈 売上管理</h2>
+                    <br>
+                    <button id="btn-export-sales-csv" class="btn-outline">📥 CSV出力 (売上履歴)</button>
+                </div>
+
+                <div class="totals-display"
+                    style="text-align:center; padding: 2rem; background: #fafafa; border-radius: 10px; border: 2px dashed #ccc; margin-bottom:20px;">
+                    <h3 style="margin: 0; font-size: 1.2rem; color: #666;">本日の売上合計</h3>
+                    <strong id="today-sales-total"
+                        style="color:var(--primary-purple); font-size:3rem; line-height: 1;">¥0</strong>
+                </div>
+
+                <h3>📋 売上履歴</h3>
+                <table class="data-table w-100" style="font-size: 1rem;">
+                    <thead>
+                        <tr>
+                            <th>時間</th>
+                            <th>内容(各購入数)</th>
+                            <th>金額</th>
+                            <th>取消</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pos-sales-history-tbody">
+                        <!-- JSで追加 -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
         <!-- Admin View (設定) -->
         <section id="admin-view" class="view">
             <div class="card" style="max-width: 600px; margin: 0 auto;">
@@ -344,17 +361,11 @@
 
                 <hr class="mb-4">
 
-                <div class="totals-display" style="text-align:center; margin-bottom:20px;">
-                    <h3>本日の売上: <strong id="today-sales-total"
-                            style="color:var(--primary-purple); font-size:1.5rem;">¥0</strong></h3>
-                </div>
-
-                <button id="btn-export-sales-csv" class="btn-outline w-100 mb-2">CSV出力 (売上履歴)</button>
-                <button id="btn-export-csv" class="btn-outline w-100 mb-4">CSV出力 (予約名簿)</button>
+                <button id="btn-export-csv" class="btn-outline w-100 mb-4">📥 CSV出力 (予約名簿)</button>
 
                 <button id="btn-generate-test-products" class="btn-secondary w-100 mb-2">テスト用商品を登録する</button>
                 <button id="btn-generate-test" class="btn-secondary w-100 mb-2">テスト用名簿データを10名分ずつ生成</button>
-                <button id="btn-clear-all" class="btn-danger w-100">名簿と売上データをリセットする</button>
+                <button id="btn-clear-all" class="btn-danger w-100">⚠️ 名簿と売上データをリセットする</button>
             </div>
         </section>
     </main>
