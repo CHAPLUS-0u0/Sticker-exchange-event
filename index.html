@@ -97,19 +97,7 @@
                         style="width: 100px; padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
                     <datalist id="pos-number-suggestions"></datalist>
                     <button id="btn-pos-check-number" class="btn-primary"
-                        style="padding: 8px 12px; font-size: 0.9rem; white-space: nowrap;">✅ 受付</button>
-                </div>
-
-                <!-- 手入力追加部 -->
-                <div
-                    style="display: flex; align-items: center; gap: 5px; border-left: 1px solid #eee; padding-left: 15px;">
-                    <input type="text" id="pos-manual-name" placeholder="内容(任意)"
-                        style="width: 100px; padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
-                    <input type="number" id="pos-manual-price" placeholder="金額"
-                        style="width: 70px; padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
-                    <span style="font-size: 0.9rem; color: #666;">円</span>
-                    <button id="btn-add-manual" class="btn-secondary"
-                        style="padding: 8px 12px; margin: 0; font-size: 0.9rem; border-width: 1px;">追加</button>
+                        style="padding: 8px 12px; font-size: 0.9rem; white-space: nowrap;">✅ 受付(チェックイン)</button>
                 </div>
             </div>
 
@@ -117,9 +105,22 @@
                 <!-- 左側：商品選択グリッド -->
                 <div class="pos-main card p-3"
                     style="height: 100%; overflow-y: auto; display: flex; flex-direction: column;">
-                    <h2
-                        style="font-size: 1.1rem; margin-bottom: 5px; color: #444; border-bottom: 2px solid #eee; padding-bottom: 5px;">
-                        🛍️ 商品一覧</h2>
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #eee; padding-bottom: 5px; margin-bottom: 5px;">
+                        <h2 style="font-size: 1.1rem; margin: 0; color: #444;">🛍️ 商品一覧</h2>
+                        <!-- 手入力追加部（移動） -->
+                        <div style="display: flex; align-items: center; gap: 5px;">
+                            <span style="font-size: 0.85rem; color:#888;">✍️ 手入力:</span>
+                            <input type="text" id="pos-manual-name" placeholder="内容(任意)"
+                                style="width: 100px; padding: 5px; border-radius: 5px; border: 1px solid #ccc; font-size: 0.9rem;">
+                            <input type="number" id="pos-manual-price" placeholder="金額"
+                                style="width: 70px; padding: 5px; border-radius: 5px; border: 1px solid #ccc; font-size: 0.9rem;">
+                            <span style="font-size: 0.85rem; color: #666;">円</span>
+                            <button id="btn-add-manual" class="btn-secondary"
+                                style="padding: 4px 8px; margin: 0; font-size: 0.85rem; border-width: 1px;">🛒
+                                カートへ</button>
+                        </div>
+                    </div>
                     <div id="product-grid" class="product-grid" style="max-height: none; flex-grow: 1;">
                         <!-- JSで追加 -->
                     </div>
