@@ -13,11 +13,11 @@ let state = {
         completionNotice: "※今回は無料でご参加いただけますが、次回以降は有料になる可能性があります。\n※当日スムーズにご案内できるようご協力をお願いいたします！",
         topNotice: "ここにイベントのお知らせ案内が表示されます✨",
         topImage: "",
-        gasUrl: "https://script.google.com/macros/s/AKfycbxKqkvvSDLWc2M6NkxzyMJ9_8DWPspAfQWUB6fOi6gVRDRmgvW50V9jzrX1uNWDTa9k/exec", // Google Apps Script URL
+        gasUrl: "https://script.google.com/macros/s/AKfycbxKqkvvSDLWc2M6NkxzyMJ9_8DWPspAfQWUB6fOi6gVRDRmgvW50V9jzrX1uNWDTa9k/exec",
         adminPassword: "admin"
     },
-    currentSlotFilter: 'all',
-    lastUpdated: 0 // 同期判定用タイムスタンプ
+    currentSlotFilter: 'all', // 初期値は「すべて」
+    lastUpdated: 0
 };
 
 let isAdminAuth = sessionStorage.getItem('sticker_admin_auth') === 'true';
@@ -35,24 +35,72 @@ const slots = {
 
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', async () => {
+    // 1. まずデータを読み込み（チラつき防止のため最優先）
     await loadData();
+
+    // 2. アクセス判定と画面表示（この時点でデータがstateに入っている）
     checkAccess();
+
+    // 3. イベントリスナーなどの初期化
     initApp();
+
+    // 4. 最終的な表示更新
+    refreshActiveView();
 });
 
+/**
+ * 現在アクティブな（表示されている）ビューの表示内容を最新データで更新する
+ */
+function refreshActiveView() {
+    const activeView = document.querySelector('.view.active');
+    if (!activeView) return;
+    const targetId = activeView.id;
+
+    if (targetId === 'reception-view') updateReceptionList();
+    if (targetId === 'pos-view') refreshPOS();
+    if (targetId === 'product-admin-view') updateAdminProductList();
+    if (targetId === 'admin-view') {
+        updateSettingsUI();
+        applySettingsToInputs();
+    }
+    if (targetId === 'top-view') updateSettingsUI();
+    if (targetId === 'sales-view') {
+        updateSalesHistoryUI();
+        updateTodaySales();
+        updateSlotSummary();
+    }
+}
+
 async function loadData() {
-    // 1. ローカルから読み込み
+    console.log("--- Loading Data ---");
     const saved = localStorage.getItem('sticker_exchange_data');
+    // ... (existing deserialization)
     if (saved) {
-        state = JSON.parse(saved);
-        // 後方互換性ガード
+        try {
+            const data = JSON.parse(saved);
+            // stateオブジェクトの参照を壊さないようにプロパティ単位で更新
+            if (data.entries) state.entries = data.entries;
+            if (data.products) state.products = data.products;
+            if (data.sales) state.sales = data.sales;
+            if (data.slotCounts) state.slotCounts = data.slotCounts;
+            if (data.settings) state.settings = { ...state.settings, ...data.settings };
+            if (data.lastUpdated) state.lastUpdated = data.lastUpdated;
+        } catch (e) {
+            console.error("Corrupted local data:", e);
+        }
+        // 後方互換性ガード & 配列初期化保証
         if (!state.settings) state.settings = {};
+        if (!Array.isArray(state.entries)) state.entries = [];
+        if (!Array.isArray(state.products)) state.products = [];
+        if (!Array.isArray(state.sales)) state.sales = [];
+        if (!state.slotCounts) state.slotCounts = {};
     }
 
-    // ハードコードされたGAS URLを常に適用（各端末での初期設定不要にするため）
+    // ハードコードされたGAS URLを常に適用
     const HARDCODED_GAS_URL = "https://script.google.com/macros/s/AKfycbxKqkvvSDLWc2M6NkxzyMJ9_8DWPspAfQWUB6fOi6gVRDRmgvW50V9jzrX1uNWDTa9k/exec";
     if (state.settings) {
         state.settings.gasUrl = HARDCODED_GAS_URL;
+        if (!state.settings.capacityPerSlot) state.settings.capacityPerSlot = 20;
     }
 
     // 2. クラウド同期 (URLが設定されている場合)
@@ -60,26 +108,57 @@ async function loadData() {
         updateSyncStatus('syncing');
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 8000); // 8秒タイムアウト
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
 
             const response = await fetch(`${state.settings.gasUrl}?action=get`, { signal: controller.signal });
             clearTimeout(timeoutId);
 
             if (response.ok) {
                 const cloudData = await response.json();
-                if (cloudData && cloudData.lastUpdated) {
+                if (cloudData) {
                     const localTime = state.lastUpdated || 0;
                     const cloudTime = cloudData.lastUpdated || 0;
 
+                    // 単純な上書きではなく、コレクションごとにマージを行う
+                    console.log(`Syncing: Local(${localTime}) vs Cloud(${cloudTime})`);
+
+                    // 1. 配列データのマージ
+                    state.entries = mergeCollections(state.entries || [], cloudData.entries || []);
+                    state.sales = mergeCollections(state.sales || [], cloudData.sales || []);
+
+                    // 商品データは特に慎重にマージ
+                    const localProducts = state.products || [];
+                    const cloudProducts = cloudData.products || [];
+                    state.products = mergeCollections(localProducts, cloudProducts);
+
+                    // 2. 設定とカウントは新しい方を優先
                     if (cloudTime > localTime) {
-                        console.log("Cloud data is newer. Updating local...");
-                        state = cloudData;
-                        localStorage.setItem('sticker_exchange_data', JSON.stringify(state));
-                    } else if (localTime > cloudTime) {
-                        console.log("Local data is newer. Syncing to cloud...");
+                        state.settings = {
+                            ...state.settings,
+                            ...cloudData.settings,
+                            gasUrl: HARDCODED_GAS_URL
+                        };
+                        // slotCounts (当日受付数) の同期
+                        if (cloudData.slotCounts) {
+                            state.slotCounts = cloudData.slotCounts;
+                        }
+                        state.lastUpdated = cloudTime;
+                        // 設定画面の入力欄を更新
+                        applySettingsToInputs();
+                        updateSettingsUI();
+                    }
+
+                    localStorage.setItem('sticker_exchange_data', JSON.stringify(state));
+
+                    if (localTime >= cloudTime) {
                         syncToCloud();
                     }
                 }
+                // recalculateSlotCounts() は手入力分を消去してしまうため呼ばないか、
+                // あるいは当日分を別で合算するように修正が必要。
+                // 今回は「当日受付」と「予約分」を分けたため、
+                // 手入力分である slotCounts を recalculate で上書きしてはいけない。
+
                 updateSyncStatus('success');
             }
         } catch (e) {
@@ -91,66 +170,137 @@ async function loadData() {
 
 function saveData() {
     state.lastUpdated = Date.now();
-    localStorage.setItem('sticker_exchange_data', JSON.stringify(state));
+    try {
+        localStorage.setItem('sticker_exchange_data', JSON.stringify(state));
+        console.log("Data saved to localStorage. items:", state.entries.length);
+    } catch (e) {
+        console.error("Save failed:", e);
+        if (e.name === 'QuotaExceededError' || e.code === 22) {
+            alert("⚠️ 保存容量がいっぱいです！\n古い売上履歴を削除するか、不要な商品を削除して空き容量を増やしてください。");
+        } else {
+            alert("⚠️ 保存中にエラーが発生しました。");
+        }
+    }
     updateTodaySales();
-    syncToCloud(); // バックグラウンドで送信
+    syncToCloud();
 }
 
 function updateSyncStatus(status) {
     const el = document.getElementById('sync-status');
     if (!el) return;
+
+    // 現在のストレージ使用量を計算 (localStorageの制限は約5MB)
+    const usageStr = localStorage.getItem('sticker_exchange_data') || "";
+    const usagePercent = Math.min(100, Math.round((usageStr.length / (5 * 1024 * 1024)) * 100));
+    const usageText = ` [容量:${usagePercent}%]`;
+
     switch (status) {
         case 'syncing': el.textContent = '🔄 同期中...'; el.style.color = '#ffa726'; break;
         case 'success': el.textContent = '✅ 同期完了'; el.style.color = '#66bb6a'; break;
         case 'error': el.textContent = '⚠️ 接続エラー'; el.style.color = '#ef5350'; break;
+        case 'quota_error': el.textContent = '⚠️ 容量不足 (要整理)'; el.style.color = '#ff7043'; break;
         default: el.textContent = '未設定'; el.style.color = '#888';
     }
+    el.textContent += usageText;
 }
 
 async function syncToCloud() {
-    if (!state.settings.gasUrl) return;
+    if (!state.settings.gasUrl) {
+        console.warn("Sync: No GAS URL configured.");
+        return;
+    }
 
+    updateSyncStatus('syncing');
     try {
+        const payload = JSON.stringify(state);
+        console.log("Sync: Sending data to cloud. Size:", payload.length);
+
         const response = await fetch(state.settings.gasUrl, {
             method: 'POST',
-            body: JSON.stringify(state),
-            mode: 'no-cors' // GASの制約上、レスポンス取得が難しいため no-cors で送る
+            body: payload,
+            mode: 'no-cors'
         });
+
+        // no-corsではレスポンス内容は見れないが、到達はしたとみなす
         updateSyncStatus('success');
+        console.log("Sync: Data sent (no-cors mode)");
     } catch (e) {
-        console.error("Sync to cloud failed:", e);
+        console.error("Sync: Cloud push failed:", e);
         updateSyncStatus('error');
     }
+}
+
+async function forceSyncToCloud() {
+    if (!confirm("現在のiPadのデータをクラウド(スプレッドシート)に強制的に上書き送信します。よろしいですか？\n※他の端末で入力したデータよりこちらが優先されます。")) return;
+
+    state.lastUpdated = Date.now(); // タイムスタンプを強制更新
+    saveData();
+    alert("クラウドへデータを送信しました✨\nスプレッドシート側を確認してください。");
+}
+
+/**
+ * 二つのコレクション（オブジェクトの配列）をIDに基づいてマージする
+ * @param {Array} localLocal 
+ * @param {Array} cloudRemote 
+ * @returns {Array} マージされた配列
+ */
+function mergeCollections(local, cloud) {
+    if (!Array.isArray(cloud)) return local || [];
+    if (!Array.isArray(local)) return cloud || [];
+
+    const merged = [...local];
+    const localIds = new Set(local.map(item => item.id));
+
+    cloud.forEach(cloudItem => {
+        if (!localIds.has(cloudItem.id)) {
+            merged.push(cloudItem);
+        } else {
+            // IDが重複する場合、基本的には「新しい方」を採用したいが、
+            // 簡易化のため一旦local側（現在の操作）を優先しつつ
+            // もしCloud側にしか無いプロパティがあれば補完するなどの拡張が可能
+            const localIndex = merged.findIndex(item => item.id === cloudItem.id);
+            // タイムスタンプがあれば比較するロジックも追加可能
+        }
+    });
+
+    return merged;
 }
 
 // アクセス制御
 function checkAccess() {
     const urlParams = new URLSearchParams(window.location.search);
-    const isAdminViewReq = urlParams.get('view') === 'admin';
+    const viewParam = urlParams.get('view');
+    const isAdminViewReq = viewParam === 'admin';
+    const isFormViewReq = viewParam === 'form';
 
     document.getElementById('login-modal').classList.add('hidden');
 
-    if (isAdminAuth && !isAdminViewReq) {
+    // どの画面を表示するか判定
+    let defaultAdminTab = sessionStorage.getItem('sticker_last_view') || 'pos-view';
+    // 不正な値やadmin-view(設定)以外への誘導を防ぐためのガード
+    const validAdminTabs = ['pos-view', 'sales-view', 'product-admin-view', 'registration-view', 'reception-view', 'admin-view', 'data-management-view'];
+    if (!validAdminTabs.includes(defaultAdminTab)) defaultAdminTab = 'pos-view';
+
+    if (isFormViewReq) {
+        // ?view=form は誰でも(ログイン・未ログイン問わず)最優先で表示
+        document.getElementById('main-nav').classList.add('hidden');
+        switchView(null, 'registration-view', false); // 保存しない
+    } else if (isAdminAuth) {
         // 管理者認証済み
         document.getElementById('main-nav').classList.remove('hidden');
-        switchView(document.querySelector('[data-target="pos-view"]'), 'pos-view');
-    } else if (isAdminAuth && isAdminViewReq) {
-        // auth済みかつadmin直指定時
-        document.getElementById('main-nav').classList.remove('hidden');
-        switchView(document.querySelector('[data-target="pos-view"]'), 'pos-view');
-        // ※URLパラメータを消す処理はinitAppのlogin内にあるが、直リン時に消すのは省略
+        const activeBtn = document.querySelector(`[data-target="${defaultAdminTab}"]`);
+        switchView(activeBtn, defaultAdminTab, false); // 初期ロード時は再保存不要
     } else {
-        // 一般向けトップページ（通常・?view=form問わず、未設定時はすべてここ）
+        // 一般向けトップページ優先
         document.getElementById('main-nav').classList.add('hidden');
-        switchView(null, 'top-view');
+        switchView(null, 'top-view', false);
 
-        // 管理画面へ直通URLを踏んだ場合のみログイン画面を出す
+        // 管理画面へ直通URLを踏んだか、認証がない場合は強制ログイン
         if (isAdminViewReq) {
             document.getElementById('login-modal').classList.remove('hidden');
         }
     }
 }
-
 function initApp() {
     // ---- ログイン・ログアウト ----
     document.getElementById('btn-login').addEventListener('click', () => {
@@ -215,6 +365,7 @@ function initApp() {
 
     // ---- 設定タブ関連 ----
     updateSettingsUI();
+    applySettingsToInputs(); // 初回起動時のみ入力を同期
     document.getElementById('btn-save-settings').addEventListener('click', () => {
         state.settings.eventName = document.getElementById('setting-event-name').value;
         state.settings.eventDate = document.getElementById('setting-event-date').value;
@@ -225,8 +376,11 @@ function initApp() {
         state.settings.gasUrl = document.getElementById('setting-gas-url').value;
         saveData();
         updateSettingsUI();
+        applySettingsToInputs(); // 保存後に再同期
         alert("設定を保存しました✨");
     });
+
+    document.getElementById('btn-force-sync').addEventListener('click', forceSyncToCloud);
 
     // TOP画像アップロード処理
     document.getElementById('setting-top-img').addEventListener('change', (e) => {
@@ -297,7 +451,7 @@ function initApp() {
         if (confirm("名簿データ、売上、人数カウントをリセットします。商品情報は消えません。よろしいですか？")) {
             state.entries = [];
             state.sales = [];
-            state.slotCounts = {};
+            state.slotCounts = {}; // 確実にリセット
             saveData();
 
             // クラウド同期対応のため、少し待ってからリロード（またはUI直接クリア）
@@ -347,29 +501,95 @@ function initApp() {
 
     // ---- 番号チェック連携 ----
     document.getElementById('btn-pos-check-number').addEventListener('click', handleNumberCheck);
+
+    document.getElementById('btn-clear-old-sales').addEventListener('click', () => {
+        if (confirm("24時間以上前の古い売上履歴を削除して、保存容量を確保しますか？\n(本日の最新データは消えません)")) {
+            const now = Date.now();
+            const oneDayInMs = 24 * 60 * 60 * 1000;
+            const originalCount = state.sales.length;
+
+            state.sales = state.sales.filter(s => {
+                const ts = parseInt(s.id.split('_')[1]);
+                return !isNaN(ts) && (now - ts < oneDayInMs);
+            });
+
+            saveData();
+            updateSalesHistoryUI();
+            updateTodaySales();
+            alert(`整理完了しました。(${originalCount - state.sales.length}件を削除)`);
+        }
+    });
+
+    // ---- 短縮URL・QRコード機能 (ライブラリ未読込でも落ちないように保護) ----
+    try {
+        initShortUrlFeatures();
+    } catch (e) {
+        console.error("ShortUrl init failed:", e);
+    }
+}
+
+function initShortUrlFeatures() {
+    const qrContainer = document.getElementById('qrcode-container');
+    const btnCopy = document.getElementById('btn-copy-form-url');
+    const publicUrlLink = document.getElementById('public-form-url');
+
+    if (!qrContainer || !publicUrlLink) return;
+
+    // 現在のベースURLからフォーム用URLを生成
+    const baseUrl = window.location.origin + window.location.pathname;
+    const publicUrl = `${baseUrl}?view=form`;
+
+    publicUrlLink.href = publicUrl;
+    publicUrlLink.textContent = publicUrl;
+
+    // 即座にQRコードを生成
+    generateQRCode(qrContainer, publicUrl);
+
+    if (btnCopy) {
+        btnCopy.addEventListener('click', () => {
+            navigator.clipboard.writeText(publicUrl).then(() => {
+                const originalText = btnCopy.textContent;
+                btnCopy.textContent = "✅ コピー完了";
+                btnCopy.classList.add('btn-success');
+                setTimeout(() => {
+                    btnCopy.textContent = originalText;
+                    btnCopy.classList.remove('btn-success');
+                }, 2000);
+            });
+        });
+    }
+}
+
+function applySettingsToInputs() {
+    const safeSetValue = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val || "";
+    };
+
+    safeSetValue('setting-event-name', state.settings.eventName);
+    safeSetValue('setting-event-date', state.settings.eventDate);
+    safeSetValue('setting-hp-url', state.settings.hpUrl);
+    safeSetValue('setting-top-notice', state.settings.topNotice);
+    safeSetValue('setting-form-notice', state.settings.formNotice);
+    safeSetValue('setting-completion-notice', state.settings.completionNotice);
+    safeSetValue('setting-gas-url', state.settings.gasUrl);
 }
 
 function updateSettingsUI() {
-    document.getElementById('app-title-display').textContent = `🎀 ${state.settings.eventName} 🎀`;
-    document.getElementById('event-date-display').textContent = `📅 開催日: ${state.settings.eventDate}`;
-    document.getElementById('setting-event-name').value = state.settings.eventName;
-    document.getElementById('setting-event-date').value = state.settings.eventDate;
-    document.getElementById('setting-hp-url').value = state.settings.hpUrl || "";
-    document.getElementById('setting-top-notice').value = state.settings.topNotice || "";
-    document.getElementById('setting-form-notice').value = state.settings.formNotice || "";
-    document.getElementById('setting-completion-notice').value = state.settings.completionNotice || "";
-    document.getElementById('setting-gas-url').value = state.settings.gasUrl || "";
+    const safeSetText = (id, text) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = text;
+    };
+
+    safeSetText('app-title-display', `🎀 ${state.settings.eventName || ""} 🎀`);
+    safeSetText('event-date-display', `📅 開催日: ${state.settings.eventDate || ""}`);
 
     // タブタイトル（<title>）の反映
     document.title = state.settings.eventName ? `${state.settings.eventName}✨受付` : "シール交換会✨受付";
 
     // TOPページの反映
-    if (document.getElementById('top-event-title')) {
-        document.getElementById('top-event-title').textContent = `🎀 ${state.settings.eventName} 🎀`;
-    }
-    if (document.getElementById('top-event-date')) {
-        document.getElementById('top-event-date').textContent = `📅 開催日: ${state.settings.eventDate}`;
-    }
+    safeSetText('top-event-title', `🎀 ${state.settings.eventName || ""} 🎀`);
+    safeSetText('top-event-date', `📅 開催日: ${state.settings.eventDate || ""}`);
 
     // TOPページの案内と画像の反映
     const topNoticeArea = document.getElementById('top-notice-area');
@@ -385,16 +605,12 @@ function updateSettingsUI() {
     const topImgView = document.getElementById('top-view-image');
     const topImgPreview = document.getElementById('setting-top-img-preview');
     const topImgClearBtn = document.getElementById('btn-clear-top-img');
-    if (state.settings.topImage) {
-        if (topImgView) {
-            topImgView.src = state.settings.topImage;
-            topImgView.style.display = 'block';
-        }
-        if (topImgPreview) {
-            topImgPreview.src = state.settings.topImage;
-            topImgPreview.style.display = 'block';
-            topImgClearBtn.style.display = 'inline-block';
-        }
+    const topImage = state.settings.topImage;
+
+    if (topImage) {
+        if (topImgView) { topImgView.src = topImage; topImgView.style.display = 'block'; }
+        if (topImgPreview) { topImgPreview.src = topImage; topImgPreview.style.display = 'block'; }
+        if (topImgClearBtn) topImgClearBtn.style.display = 'inline-block';
     } else {
         if (topImgView) topImgView.style.display = 'none';
         if (topImgPreview) topImgPreview.style.display = 'none';
@@ -403,62 +619,76 @@ function updateSettingsUI() {
 
     // フッターのHP(SNS)リンク更新
     const footerHp = document.getElementById('footer-hp-link');
-    if (state.settings.hpUrl) {
-        if (!footerHp.querySelector('a')) {
-            footerHp.innerHTML = `<a href="${state.settings.hpUrl}" target="_blank" class="hp-link">📱 イベントのSNS・リンクはこちら</a>`;
+    if (footerHp) {
+        if (state.settings.hpUrl) {
+            if (!footerHp.querySelector('a')) {
+                footerHp.innerHTML = `<a href="${state.settings.hpUrl}" target="_blank" class="hp-link">📱 イベントのSNS・リンクはこちら</a>`;
+            } else {
+                footerHp.querySelector('a').href = state.settings.hpUrl;
+            }
         } else {
-            footerHp.querySelector('a').href = state.settings.hpUrl;
-        }
-    } else {
-        footerHp.innerHTML = "";
-    }
-
-    // 予約フォームの案内文言（TOPに置いたためフォーム上では非表示にする手もあるが、一旦両方に反映させる）
-    const formNoticeArea = document.getElementById('form-notice-area');
-    if (formNoticeArea) {
-        if (state.settings.formNotice && state.settings.formNotice.trim() !== "") {
-            formNoticeArea.textContent = state.settings.formNotice;
-            formNoticeArea.style.display = 'block';
-        } else {
-            formNoticeArea.style.display = 'none';
+            footerHp.innerHTML = "";
         }
     }
 
-    // 完了画面の案内文言
-    const completionNoticeArea = document.getElementById('completion-notice-area');
-    if (completionNoticeArea) {
-        if (state.settings.completionNotice && state.settings.completionNotice.trim() !== "") {
-            completionNoticeArea.textContent = state.settings.completionNotice;
-            completionNoticeArea.style.display = 'block';
-        } else {
-            completionNoticeArea.style.display = 'none';
+    // 各種案内文
+    const setNotice = (id, text) => {
+        const el = document.getElementById(id);
+        if (el) {
+            if (text && text.trim() !== "") {
+                el.textContent = text;
+                el.style.display = 'block';
+            } else {
+                el.style.display = 'none';
+            }
         }
-    }
+    };
+    setNotice('form-notice-area', state.settings.formNotice);
+    setNotice('completion-notice-area', state.settings.completionNotice);
 
     updateTodaySales();
 
     // 公開URLの生成と表示
-    const currentUrl = new URL(window.location.href);
-    currentUrl.search = '?view=form';
-    document.getElementById('public-form-url').href = currentUrl.href;
-    document.getElementById('public-form-url').textContent = currentUrl.href;
+    const publicUrlEl = document.getElementById('public-form-url');
+    if (publicUrlEl) {
+        const currentUrl = new URL(window.location.href);
+        currentUrl.search = '?view=form';
+        publicUrlEl.href = currentUrl.href;
+        publicUrlEl.textContent = currentUrl.href;
+    }
 }
 
 // 画面切り替え
-function switchView(btn, targetId) {
+function switchView(btn, targetId, shouldSave = true) {
     if (btn) {
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
     }
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-    document.getElementById(targetId).classList.add('active');
+    const targetEl = document.getElementById(targetId);
+    if (targetEl) {
+        targetEl.classList.add('active');
+        window.scrollTo(0, 0); // 切り替え時に上端に戻す
+        if (shouldSave && isAdminAuth) {
+            sessionStorage.setItem('sticker_last_view', targetId);
+        }
+    }
 
-    if (targetId === 'reception-view') updateReceptionList();
+    if (targetId === 'top-view') updateSettingsUI();
+    if (targetId === 'admin-view') {
+        updateSettingsUI();
+        applySettingsToInputs(); // 管理画面に入るたびに最新状態を同期
+    }
+    if (targetId === 'reception-view') {
+        state.currentSlotFilter = 'all'; // 最初はすべて表示
+        updateReceptionList();
+    }
     if (targetId === 'pos-view') refreshPOS();
     if (targetId === 'product-admin-view') updateAdminProductList();
     if (targetId === 'sales-view') {
         updateSalesHistoryUI();
         updateTodaySales();
+        updateSlotSummary();
     }
 }
 
@@ -542,13 +772,16 @@ let pendingImageBase64 = "";
 function initProductAdmin() {
     const imgInput = document.getElementById('prod-img');
     const imgPreview = document.getElementById('prod-img-preview');
+    const btnAdd = document.getElementById('btn-add-product');
 
-    imgInput.addEventListener('change', (e) => {
+    imgInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (file) {
             const reader = new FileReader();
-            reader.onload = function (event) {
-                pendingImageBase64 = event.target.result;
+            reader.onload = async function (event) {
+                const rawBase64 = event.target.result;
+                // 画像を圧縮してから保存
+                pendingImageBase64 = await compressImage(rawBase64);
                 imgPreview.src = pendingImageBase64;
                 imgPreview.style.display = 'block';
             };
@@ -556,7 +789,7 @@ function initProductAdmin() {
         }
     });
 
-    document.getElementById('btn-add-product').addEventListener('click', () => {
+    btnAdd.addEventListener('click', () => {
         const id = document.getElementById('prod-id-editing').value;
         const name = document.getElementById('prod-name').value.trim();
         const price = parseInt(document.getElementById('prod-price').value);
@@ -566,41 +799,49 @@ function initProductAdmin() {
             return;
         }
 
-        if (id) {
-            // 更新
-            const idx = state.products.findIndex(p => p.id === id);
-            if (idx !== -1) {
-                state.products[idx] = {
-                    ...state.products[idx],
+        // 二重登録防止
+        btnAdd.disabled = true;
+        btnAdd.textContent = "⌛ 保存中...";
+
+        setTimeout(() => {
+            if (id) {
+                // 更新
+                const idx = state.products.findIndex(p => p.id === id);
+                if (idx !== -1) {
+                    state.products[idx] = {
+                        ...state.products[idx],
+                        name: name,
+                        price: price,
+                        image: pendingImageBase64 || state.products[idx].image
+                    };
+                }
+                document.getElementById('prod-id-editing').value = '';
+            } else {
+                // 新規
+                const newProd = {
+                    id: 'prod_' + Date.now(),
                     name: name,
                     price: price,
-                    image: pendingImageBase64 || state.products[idx].image
+                    image: pendingImageBase64 || ''
                 };
+                state.products.push(newProd);
             }
-            document.getElementById('prod-id-editing').value = '';
-            document.getElementById('btn-add-product').textContent = "商品を追加 / 更新";
-        } else {
-            // 新規
-            const newProd = {
-                id: 'prod_' + Date.now(),
-                name: name,
-                price: price,
-                image: pendingImageBase64 || ''
-            };
-            state.products.push(newProd);
-        }
 
-        saveData();
+            saveData();
 
-        // リセット
-        document.getElementById('prod-name').value = '';
-        document.getElementById('prod-price').value = '';
-        imgInput.value = '';
-        imgPreview.style.display = 'none';
-        pendingImageBase64 = "";
+            // リセット
+            document.getElementById('prod-name').value = '';
+            document.getElementById('prod-price').value = '';
+            imgInput.value = '';
+            imgPreview.style.display = 'none';
+            pendingImageBase64 = "";
 
-        updateAdminProductList();
-        alert(id ? "商品を更新しました✨" : "商品を追加しました✨");
+            updateAdminProductList();
+
+            btnAdd.disabled = false;
+            btnAdd.textContent = "商品を追加 / 更新";
+            alert(id ? "商品を更新しました✨" : "商品を追加しました✨");
+        }, 300);
     });
 }
 
@@ -617,10 +858,11 @@ function updateAdminProductList() {
         const item = document.createElement('div');
         item.className = 'admin-product-item';
 
-        const imgSrc = p.image ? p.image : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="50" height="50"><rect width="50" height="50" fill="%23eee"/></svg>';
+        // SVG内のダブルクォートをエスケープまたは避ける
+        const imgSrc = p.image ? p.image : `data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='50' height='50'%3E%3Crect width='50' height='50' fill='%23eee'/%3E%3C/svg%3E`;
 
         item.innerHTML = `
-            <img src="${imgSrc}" alt="${p.name}">
+            <img src="${imgSrc}" alt="${p.name.replace(/"/g, '&quot;')}">
             <div class="admin-product-info">
                 <div class="name">${p.name}</div>
                 <div class="price">¥${p.price}</div>
@@ -762,10 +1004,10 @@ function refreshPOS() {
         state.products.forEach(p => {
             const tile = document.createElement('div');
             tile.className = 'product-tile';
-            const imgSrc = p.image ? p.image : 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="%23eee"/></svg>';
+            const imgSrc = p.image ? p.image : `data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect width='100' height='100' fill='%23eee'/%3E%3C/svg%3E`;
 
             tile.innerHTML = `
-                <img src="${imgSrc}" loading="lazy">
+                <img src="${imgSrc}" loading="lazy" alt="${p.name.replace(/"/g, '&quot;')}">
                 <div class="name">${p.name}</div>
                 <div class="price">¥${p.price}</div>
             `;
@@ -803,12 +1045,69 @@ function updateSalesHistoryUI() {
 
         tr.innerHTML = `
             <td>${displayTime}</td>
-            <td>${itemNames}<br><strong style="color:var(--primary-pink);">¥${sale.total}</strong></td>
-            <td><button class="btn-delete-entry" onclick="deleteSaleEntry('${sale.id}')" style="padding: 4px 8px; font-size: 0.8rem;">取消</button></td>
+            <td>${itemNames}</td>
+            <td style="text-align:right;"><strong>¥${sale.total.toLocaleString()}</strong></td>
+            <td style="padding-left: 20px;">
+                <div style="display:flex; gap:5px;">
+                    <button class="btn-checkin" onclick="editSaleEntry('${sale.id}')" style="background:#4fc3f7; border:none; color:white; padding:4px 8px; font-size: 0.8rem; border-radius:8px;">修正</button>
+                    <button class="btn-delete-entry" onclick="deleteSaleEntry('${sale.id}')" style="padding: 4px 8px; font-size: 0.8rem;">取消</button>
+                </div>
+            </td>
         `;
         tbody.appendChild(tr);
     });
 }
+
+function compressImage(base64Str, maxWidth = 320, quality = 0.6) {
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.src = base64Str;
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+
+            if (width > maxWidth) {
+                height *= maxWidth / width;
+                width = maxWidth;
+            }
+
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            // 本番用にさらに圧縮率を高める
+            resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = () => resolve(base64Str); // 失敗時は元のまま
+    });
+}
+
+window.editSaleEntry = function (saleId) {
+    const sale = state.sales.find(s => s.id === saleId);
+    if (!sale) return;
+
+    if (currentCart.length > 0) {
+        if (!confirm("カートに商品が入っています。上書きして修正を開始しますか？")) return;
+    }
+
+    // カートに読み戻す
+    currentCart = [...sale.items];
+
+    // 商品名からstate.productsに存在するものを紐付けておく（必要なら）
+    // updateCartUIがIDベースで動いているならIDが一致する必要がある
+
+    // 元の売上を削除（修正後に再度会計してもらう形式）
+    state.sales = state.sales.filter(s => s.id !== saleId);
+
+    saveData();
+    switchView(null, 'pos-view');
+    updateSalesHistoryUI();
+    updateCartUI();
+    updateTodaySales();
+
+    alert("売上データをカートに読み込みました。内容を修正して再度「会計する」を押してください。");
+};
 
 window.deleteSaleEntry = function (saleId) {
     if (confirm("この売上を取り消しますか？\n（本日の売上合計からも減算されます）")) {
@@ -823,9 +1122,28 @@ function updatePOSCounterDisplay() {
     const slotId = document.getElementById('pos-slot-select').value;
     if (!slotId) return;
 
-    document.getElementById('pos-current-slot-name').textContent = slots[slotId].name;
-    const count = state.slotCounts[slotId] || 0;
-    document.getElementById('pos-slot-count').textContent = count;
+    // 当日受付分 (手入力)
+    const manualCount = state.slotCounts[slotId] || 0;
+    // 予約分 (名簿からステータス取得)
+    const reservedCheckedIn = state.entries.filter(en => en.slotId === slotId && en.status === 'checked-in').length;
+    const reservedTotal = state.entries.filter(en => en.slotId === slotId).length;
+
+    // 当日カウンター表示の更新
+    const countEl = document.getElementById('pos-slot-count');
+    if (countEl) countEl.textContent = manualCount;
+
+    const headerManualEl = document.getElementById('pos-header-manual-count');
+    if (headerManualEl) headerManualEl.textContent = manualCount;
+
+    // ヘッダーの進捗表示: 予約 ◯/◯名 | 当日 ◯名
+    const statusEl = document.getElementById('pos-checkin-status');
+    if (statusEl) {
+        statusEl.innerHTML = `
+            <span class="label">予約受付</span> <span class="count">${reservedCheckedIn}</span> / <span class="total">${reservedTotal}</span>名
+            <span class="sep">|</span>
+            <span class="label">当日受付</span> <span class="count">${manualCount}</span>名
+        `;
+    }
 
     updatePOSSuggestions();
 }
@@ -1021,12 +1339,7 @@ function generateTestData() {
                     timestamp: new Date().toLocaleString()
                 };
 
-                // 受付済みの場合はスロットカウントも増やす
-                if (entry.status === 'checked-in') {
-                    if (!state.slotCounts[slotId]) state.slotCounts[slotId] = 0;
-                    state.slotCounts[slotId]++;
-                }
-
+                // 整理番号受付は予約ステータスのみ管理（slotCountsは当日受付専用にする）
                 state.entries.push(entry);
             }
         });
@@ -1034,6 +1347,7 @@ function generateTestData() {
         saveData();
         populateSlotSelects();
         updateReceptionList();
+        updatePOSCounterDisplay(); // カウンターも同期
         alert("全時間帯のテストデータを生成しました✨\n「名簿管理」でタブを切り替えて確認できます。");
     } catch (err) {
         console.error("Generate error:", err);
@@ -1044,19 +1358,29 @@ function generateTestData() {
 function generateTestProducts() {
     try {
         console.log("Generating test products...");
-        state.products = [
-            { id: 'test_prod_1', name: '✨ キラシール (レア)', price: 100, image: '' },
-            { id: 'test_prod_2', name: '🌸 お花シール', price: 50, image: '' },
-            { id: 'test_prod_3', name: '🐶 わんこシール', price: 50, image: '' },
-            { id: 'test_prod_4', name: '⭐ お星さまシール', price: 50, image: '' },
-            { id: 'test_prod_5', name: '🌈 レインボーセット', price: 300, image: '' }
+        const tests = [
+            { id: 'test_prod_1', name: '✨ キラシール (レア)', price: 100, image: "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect width='100' height='100' fill='%23fff9c4'/%3E%3Ctext x='50%25' y='50%25' font-size='40' text-anchor='middle' dy='.3em'%3E✨%3C/text%3E%3C/svg%3E" },
+            { id: 'test_prod_2', name: '🌸 お花シール', price: 50, image: "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect width='100' height='100' fill='%23fce4ec'/%3E%3Ctext x='50%25' y='50%25' font-size='40' text-anchor='middle' dy='.3em'%3E🌸%3C/text%3E%3C/svg%3E" },
+            { id: 'test_prod_3', name: '🐶 わんこシール', price: 50, image: "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect width='100' height='100' fill='%23efebe9'/%3E%3Ctext x='50%25' y='50%25' font-size='40' text-anchor='middle' dy='.3em'%3E🐶%3C/text%3E%3C/svg%3E" },
+            { id: 'test_prod_4', name: '⭐ お星さまシール', price: 50, image: "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect width='100' height='100' fill='%23fff3e0'/%3E%3Ctext x='50%25' y='50%25' font-size='40' text-anchor='middle' dy='.3em'%3E⭐%3C/text%3E%3C/svg%3E" },
+            { id: 'test_prod_5', name: '🌈 レインボーセット', price: 300, image: "data:image/svg+xml;charset=UTF-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect width='100' height='100' fill='%23e1f5fe'/%3E%3Ctext x='50%25' y='50%25' font-size='40' text-anchor='middle' dy='.3em'%3E🌈%3C/text%3E%3C/svg%3E" }
         ];
+
+        // 既存の商品を消さずに、IDが重複しないものだけ追加する
+        if (!Array.isArray(state.products)) state.products = [];
+        const existingIds = new Set(state.products.map(p => p.id));
+
+        tests.forEach(t => {
+            if (!existingIds.has(t.id)) {
+                state.products.push(t);
+            }
+        });
 
         saveData();
         updateAdminProductList();
         refreshPOS();
 
-        alert("テスト用の商品データを5個登録しました！✨\n「商品管理」または「レジ・受付」のタブで確認できます。");
+        alert("テスト用の商品を5個追加しました！✨\n（自分で登録した商品はそのまま残っています）");
     } catch (err) {
         console.error("Generate products error:", err);
         alert("エラーが発生しました: " + err.message);
@@ -1086,7 +1410,8 @@ function updateReceptionFilters() {
     Object.keys(slots).forEach(slotId => {
         const btn = document.createElement('button');
         btn.textContent = slots[slotId].name;
-        btn.className = `filter-btn ${state.currentSlotFilter === slotId ? 'active' : ''}`;
+        // 色分けクラスを付与
+        btn.className = `filter-btn slot-color-${slotId} ${state.currentSlotFilter === slotId ? 'active' : ''}`;
         btn.onclick = () => {
             state.currentSlotFilter = slotId;
             updateReceptionFilters();
@@ -1096,9 +1421,39 @@ function updateReceptionFilters() {
     });
 }
 
+function updateSearchResultCount(count, searchVal) {
+    let countEl = document.getElementById('search-result-count');
+    const controls = document.querySelector('.reception-controls');
+
+    if (!countEl && controls) {
+        countEl = document.createElement('div');
+        countEl.id = 'search-result-count';
+        countEl.className = 'search-result-count';
+        controls.appendChild(countEl);
+    }
+
+    if (!countEl) return;
+
+    if (searchVal.trim() === "") {
+        countEl.textContent = "";
+        countEl.style.display = 'none';
+    } else {
+        countEl.textContent = `✨ ${count}件 見つかりました`;
+        countEl.style.display = 'block';
+    }
+}
+
 function updateReceptionList() {
     const listBody = document.getElementById('reception-list-body');
-    const searchVal = document.getElementById('search-input').value.toLowerCase();
+    const searchInput = document.getElementById('search-input');
+    const searchVal = searchInput.value.toLowerCase();
+
+    // 検索中表示の制御
+    if (searchVal.trim() !== "") {
+        searchInput.classList.add('searching-active');
+    } else {
+        searchInput.classList.remove('searching-active');
+    }
 
     updateReceptionFilters(); // フィルターUIも同期
     listBody.innerHTML = '';
@@ -1118,7 +1473,10 @@ function updateReceptionList() {
     const hideCheckedIn = document.getElementById('filter-hide-checked-in') ? document.getElementById('filter-hide-checked-in').checked : false;
 
     const filtered = sortedEntries.filter(en => {
-        const matchesSlot = state.currentSlotFilter === 'all' || en.slotId === state.currentSlotFilter;
+        // 検索ワードがある場合はスロットフィルターを無視して全件から探す
+        const isSearching = searchVal.trim() !== "";
+        const matchesSlot = (isSearching || state.currentSlotFilter === 'all') || en.slotId === state.currentSlotFilter;
+
         // 時間帯の文字列（例：10:00〜11:00）でも検索できるように
         const searchTargetStr = `${en.name} ${en.phone || ''} ${en.number} ${en.slotName}`.toLowerCase();
         const matchesSearch = searchTargetStr.includes(searchVal);
@@ -1129,12 +1487,22 @@ function updateReceptionList() {
 
     if (filtered.length === 0) {
         listBody.innerHTML = '<tr><td colspan="6" class="placeholder-text" style="text-align:center;">見つかりませんでした</td></tr>';
+        updateSearchResultCount(0, searchVal);
         return;
     }
 
+    updateSearchResultCount(filtered.length, searchVal);
+
     filtered.forEach(entry => {
         const tr = document.createElement('tr');
-        if (entry.status === 'checked-in') tr.className = 'checked-in';
+        // 時間帯ごとに色分けクラスを付与
+        if (entry.slotId) {
+            tr.classList.add(`slot-row-${entry.slotId}`);
+        }
+        if (entry.status === 'checked-in') {
+            tr.classList.add('checked-in');
+            // 受付済み行でも時間帯の色が薄く見えるように
+        }
 
         const statusLabel = entry.status === 'checked-in' ? '<span class="status-badge status-checked">受付済</span>' : '<span class="status-badge status-pending">未受付</span>';
 
@@ -1188,10 +1556,8 @@ function toggleCheckIn(id) {
 
         if (entry.status === 'checked-in') {
             entry.status = 'pending';
-            if (state.slotCounts[slotId] > 0) state.slotCounts[slotId]--;
         } else {
             entry.status = 'checked-in';
-            state.slotCounts[slotId]++;
         }
         saveData();
         updateReceptionList();
@@ -1238,4 +1604,96 @@ function downloadBlob(csvContent, filename) {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+}
+
+/**
+ * 名簿データ(entries)から各スロットの受付済み人数を正確に再計算する
+ */
+function recalculateSlotCounts() {
+    // 一旦リセット
+    state.slotCounts = {};
+    Object.keys(slots).forEach(sid => state.slotCounts[sid] = 0);
+
+    // 受付済みの人をカウント
+    if (Array.isArray(state.entries)) {
+        state.entries.forEach(en => {
+            if (en.status === 'checked-in') {
+                if (!state.slotCounts[en.slotId]) state.slotCounts[en.slotId] = 0;
+                state.slotCounts[en.slotId]++;
+            }
+        });
+    }
+}
+
+// --- テスト商品生成 (保存容量を節約するため少なめに) ---
+function generateTestProducts() {
+    const testDescs = [
+        { name: "キラキラシール", price: 300, color1: "#FF7043", color2: "#FFCCBC" },
+        { name: "お花セット", price: 500, color1: "#66BB6A", color2: "#C8E6C9" },
+        { name: "ワンちゃん", price: 200, color1: "#42A5F5", color2: "#BBDEFB" },
+        { name: "ねこさん", price: 250, color1: "#AB47BC", color2: "#E1BEEF" }
+    ];
+
+    testDescs.forEach(d => {
+        const svg = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><rect width='100' height='100' fill='${encodeURIComponent(d.color1)}'/><circle cx='50' cy='50' r='30' fill='${encodeURIComponent(d.color2)}'/></svg>`;
+        state.products.push({
+            id: 'prod_' + Math.random().toString(36).substr(2, 9),
+            name: d.name,
+            price: d.price,
+            image: svg
+        });
+    });
+
+    saveData();
+    updateAdminProductList();
+    if (typeof refreshPOS === 'function') refreshPOS();
+    alert("テスト商品を4件追加しました✨");
+}
+
+function generateQRCode(container, text) {
+    if (typeof QRCode === 'undefined') {
+        console.error("QRCode library is not loaded.");
+        container.innerHTML = '<p style="color:#888; font-size:0.8rem;">(QR作成失敗)</p>';
+        return;
+    }
+    container.innerHTML = '';
+    try {
+        new QRCode(container, {
+            text: encodeURI(text),
+            width: 170, // 少し大きく
+            height: 170,
+            colorDark: "#ff80ab",
+            colorLight: "#ffffff",
+            correctLevel: QRCode.CorrectLevel.M // HからMに下げて情報密度を緩和
+        });
+    } catch (e) {
+        console.error("QR Render failed:", e);
+        container.innerHTML = `<p style="color:#888; font-size:0.8rem;">QRエラー: ${text}</p>`;
+    }
+}
+
+/**
+ * 画面上の「時間帯別 当日受付数」テーブルを更新する
+ */
+function updateSlotSummary() {
+    const tbody = document.getElementById('slot-reception-summary-tbody');
+    const totalSumEl = document.getElementById('slot-reception-total-sum');
+    if (!tbody) return;
+
+    tbody.innerHTML = '';
+    let totalAllSlots = 0;
+
+    Object.keys(slots).forEach(slotId => {
+        const count = state.slotCounts[slotId] || 0;
+        totalAllSlots += count;
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${slots[slotId].name}</td>
+            <td style="text-align: center; font-weight: bold; color: var(--primary-purple);">${count}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    if (totalSumEl) totalSumEl.textContent = totalAllSlots;
 }

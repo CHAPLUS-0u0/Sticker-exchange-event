@@ -11,6 +11,7 @@
     <link
         href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@400;700&family=Noto+Sans+JP:wght@400;700&display=swap"
         rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 
 <body>
@@ -37,15 +38,17 @@
                 <li><button class="nav-btn" data-target="registration-view">予約フォーム</button></li>
                 <li><button class="nav-btn" data-target="reception-view">名簿管理</button></li>
                 <li><button class="nav-btn" data-target="admin-view">設定</button></li>
+                <li><button class="nav-btn" data-target="data-management-view"
+                        style="color:var(--primary-purple); border-color:var(--primary-purple);">💾 データ管理</button></li>
                 <li style="margin-left: auto;"><button id="btn-logout" class="nav-btn"
                         style="color:var(--primary-pink); font-weight:bold;">🚪ログアウト</button></li>
             </ul>
         </div>
     </nav>
 
-    <main class="container" id="main-content" style="max-width: 1000px;">
+    <main class="container" id="main-content" style="max-width: 1100px;">
         <!-- Top View (一般向けトップページ) -->
-        <section id="top-view" class="view active">
+        <section id="top-view" class="view">
             <div class="card" style="text-align: center; max-width: 600px; margin: 0 auto; padding: 2rem;">
                 <h1 style="color: var(--primary-pink); margin-bottom: 1rem;" id="top-event-title">🎀 イベント名 🎀</h1>
                 <p style="font-size: 1.1rem; color: #555; margin-bottom: 1.5rem;" id="top-event-date">📅 開催日: ---</p>
@@ -69,35 +72,44 @@
 
         <!-- POS View (レジ・受付) -->
         <section id="pos-view" class="view">
-            <!-- レジ画面上部：コントロールバー -->
-            <div class="pos-topbar card p-2 mb-2"
-                style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap; background: #fff;">
-                <!-- 人数カウンター部 -->
-                <div style="display: flex; align-items: center; gap: 10px;">
-                    <span style="font-weight:bold; color: #555;">時間:</span>
-                    <select id="pos-slot-select" class="slot-selector"
-                        style="min-width: 130px; padding: 5px; border-radius: 5px; border: 1px solid #ccc;"></select>
+            <div class="pos-reception-header card mb-2" style="padding: 1rem; background: #fff;">
+                <h2
+                    style="font-size: 1.25rem; margin-bottom: 1rem; color: #ff80ab; border-bottom: 2px solid var(--primary-pink); padding-bottom: 5px;">
+                    🆔 受付</h2>
 
-                    <span style="font-weight:bold; color: #555; margin-left: 10px;">人数確認:</span>
-                    <div class="counter-display"
-                        style="padding: 5px 10px; gap: 10px; border-radius: 8px; border: 2px dashed #ffb6c1; display: flex; align-items: center; background: #fffcfd;">
-                        <button id="btn-count-minus" class="counter-btn minus"
-                            style="width:35px; height:35px; font-size:1.2rem; display:flex; align-items:center; justify-content:center;">－</button>
-                        <div class="count-number" id="pos-slot-count" style="font-size:1.8rem; width:40px; margin: 0;">0
+                <div class="reception-header-flex">
+                    <div class="reception-info-box">
+                        <div class="info-item">
+                            <span class="label">時間帯</span>
+                            <select id="pos-slot-select" class="slot-selector-sm"></select>
                         </div>
-                        <button id="btn-count-plus" class="counter-btn plus"
-                            style="width:35px; height:35px; font-size:1.2rem; display:flex; align-items:center; justify-content:center;">＋</button>
+                        <div id="pos-checkin-status" class="checkin-progress-display">
+                            <span class="label">予約受付</span> <span class="count">0</span> / <span class="total">0</span>名
+                            <span class="sep">|</span>
+                            <span class="label">当日受付</span> <span id="pos-header-manual-count" class="count">0</span>名
+                        </div>
                     </div>
-                </div>
 
-                <!-- 受付番号チェック部 -->
-                <div class="pos-check-area"
-                    style="display: flex; align-items: center; gap: 5px; margin-left: auto; border-left: 1px solid #eee; padding-left: 15px;">
-                    <input type="text" id="pos-check-number" placeholder="番号(001)" list="pos-number-suggestions"
-                        style="width: 100px; padding: 8px; border-radius: 5px; border: 1px solid #ccc;">
-                    <datalist id="pos-number-suggestions"></datalist>
-                    <button id="btn-pos-check-number" class="btn-primary"
-                        style="padding: 8px 12px; font-size: 0.9rem; white-space: nowrap;">✅ 受付(チェックイン)</button>
+                    <div class="reception-action-box">
+                        <div class="manual-counter-area">
+                            <span class="label">当日受付</span>
+                            <div class="mini-counter">
+                                <button id="btn-count-minus" class="c-btn minus">－</button>
+                                <div id="pos-slot-count" class="c-num">0</div>
+                                <button id="btn-count-plus" class="c-btn plus">＋</button>
+                            </div>
+                        </div>
+
+                        <div class="reception-search-unit">
+                            <div class="search-input-wrapper">
+                                <span class="search-icon">🆔</span>
+                                <input type="text" id="pos-check-number" placeholder="整理番号(001)" inputmode="numeric"
+                                    list="pos-number-suggestions">
+                                <datalist id="pos-number-suggestions"></datalist>
+                            </div>
+                            <button id="btn-pos-check-number" class="btn-checkin-main">✅ 受付</button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -127,7 +139,8 @@
                 </div>
 
                 <!-- 右側：カートと会計 -->
-                <div class="pos-sidebar card p-3" style="height: 100%; display: flex; flex-direction: column;">
+                <div class="pos-sidebar card"
+                    style="height: 100%; display: flex; flex-direction: column; padding: 10px;">
                     <h2>🛒 カート</h2>
                     <div id="cart-items" class="cart-items">
                         <p class="placeholder-text">空っぽです</p>
@@ -141,7 +154,7 @@
                         <span style="font-size: 1.1rem;">お預かり</span>
                         <div style="display: flex; align-items: center;">
                             <span style="font-size: 1.2rem; margin-right: 5px;">¥</span>
-                            <input type="number" id="cart-tendered-amount" placeholder="金額..."
+                            <input type="number" id="cart-tendered-amount" placeholder="金額..." inputmode="numeric"
                                 style="width: 100px; text-align: right; padding: 8px; border-radius: 10px; border: 2px solid var(--primary-blue);">
                         </div>
                     </div>
@@ -285,10 +298,31 @@
                 </div>
 
                 <div class="totals-display"
-                    style="text-align:center; padding: 2rem; background: #fafafa; border-radius: 10px; border: 2px dashed #ccc; margin-bottom:20px;">
-                    <h3 style="margin: 0; font-size: 1.2rem; color: #666;">本日の売上合計</h3>
+                    style="text-align:center; padding: 1.5rem; background: #fafafa; border-radius: 10px; border: 2px dashed #ccc; margin-bottom:20px;">
+                    <h3 style="margin: 0; font-size: 1.1rem; color: #666;">本日の売上合計</h3>
                     <strong id="today-sales-total"
-                        style="color:var(--primary-purple); font-size:3rem; line-height: 1;">¥0</strong>
+                        style="color:var(--primary-purple); font-size:2.5rem; line-height: 1;">¥0</strong>
+                </div>
+
+                <div class="slot-summary-card card mb-4" style="padding: 1rem; border: 1px solid #eee;">
+                    <h3 style="margin-top: 0; font-size: 1.1rem;"><span class="icon">📝</span> 時間帯別 当日受付数</h3>
+                    <table class="data-table w-100" style="font-size: 0.9rem;">
+                        <thead>
+                            <tr>
+                                <th>時間帯</th>
+                                <th style="text-align: center;">当日受付数</th>
+                            </tr>
+                        </thead>
+                        <tbody id="slot-reception-summary-tbody">
+                            <!-- JSで追加 -->
+                        </tbody>
+                        <tfoot>
+                            <tr style="font-weight: bold; background: #fdfbff;">
+                                <td>合計</td>
+                                <td id="slot-reception-total-sum" style="text-align: center;">0</td>
+                            </tr>
+                        </tfoot>
+                    </table>
                 </div>
 
                 <h3>📋 売上履歴</h3>
@@ -296,9 +330,9 @@
                     <thead>
                         <tr>
                             <th>時間</th>
-                            <th>内容(各購入数)</th>
-                            <th>金額</th>
-                            <th>取消</th>
+                            <th>内容</th>
+                            <th style="text-align: right;">金額</th>
+                            <th style="padding-left: 20px;">操作</th>
                         </tr>
                     </thead>
                     <tbody id="pos-sales-history-tbody">
@@ -313,64 +347,89 @@
             <div class="card" style="max-width: 600px; margin: 0 auto;">
                 <div class="card-header">
                     <h2>⚙️ 管理者設定</h2>
-                    <p style="text-align:center; font-size:0.9rem; margin-bottom:1rem;">
-                        一般向け予約フォームURL：<br>
-                        <a href="?view=form" target="_blank" style="word-break: break-all;"
-                            id="public-form-url">?view=form</a>
-                    </p>
-                </div>
+                    <hr class="my-4">
+                    <h3 style="margin-bottom: 1rem;">🔗 予約フォームURL・シェア</h3>
+                    <div class="card p-3 mb-4" style="background-color: #f8f9fa; border: 2px dashed #90caf9;">
+                        <p style="font-size: 0.9rem; color: #555; margin-bottom: 10px;">
+                            一般向け予約フォームの長〜いURLはこちらです。
+                        </p>
+                        <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
+                            <div style="display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap;">
+                                <div id="qrcode-container"
+                                    style="background:white; padding:10px; border-radius:10px; border:1px solid #eee;">
+                                </div>
+                                <div style="flex:1; min-width:200px;">
+                                    <p style="font-size:0.8rem; color:#888; margin-bottom:5px;">直接URL:</p>
+                                    <a id="public-form-url" href="#" target="_blank"
+                                        style="word-break: break-all; font-size:0.9rem; color:var(--primary-blue); text-decoration:underline;"></a>
+                                    <br><br>
+                                    <button id="btn-copy-form-url" class="btn-outline"
+                                        style="font-size:0.85rem; padding:5px 15px;">URLをコピー</button>
+                                </div>
+                            </div>
+                        </div>
 
-                <hr class="my-4">
-                <h3 style="margin-bottom: 1rem;">🖼️ TOPページ設定</h3>
-                <div class="form-group">
-                    <label for="setting-top-notice">TOPページの案内・お知らせ文章</label>
-                    <textarea id="setting-top-notice" rows="4" placeholder="イベントの概要や挨拶などを自由に記入できます"
-                        style="width: 100%; padding: 10px; border-radius: 10px; border: 2px solid var(--primary-blue); outline: none; resize: vertical;"></textarea>
-                </div>
-                <div class="form-group">
-                    <label>TOPページの画像 (ポスターなど)</label>
-                    <input type="file" id="setting-top-img" accept="image/*" class="w-100"
-                        style="padding: 10px; border: 1px dashed #ccc; background: #fafafa; border-radius: 5px;">
-                    <img id="setting-top-img-preview" src=""
-                        style="width:100%; max-height:200px; object-fit:contain; margin-top:10px; display:none; background:#f0f0f0;">
-                    <button id="btn-clear-top-img" class="btn-outline mt-2"
-                        style="font-size:0.8rem; padding: 5px 10px; display:none;">画像を削除</button>
-                </div>
-                <hr class="my-4" style="margin-top: 2rem; margin-bottom: 2rem;">
+                        <hr class="my-4">
+                        <h3 style="margin-bottom: 1rem;">🖼️ TOPページ設定</h3>
+                        <div class="form-group">
+                            <label for="setting-top-notice">TOPページの案内・お知らせ文章</label>
+                            <textarea id="setting-top-notice" rows="4" placeholder="イベントの概要や挨拶などを自由に記入できます"
+                                style="width: 100%; padding: 10px; border-radius: 10px; border: 2px solid var(--primary-blue); outline: none; resize: vertical;"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>TOPページの画像 (ポスターなど)</label>
+                            <input type="file" id="setting-top-img" accept="image/*" class="w-100"
+                                style="padding: 10px; border: 1px dashed #ccc; background: #fafafa; border-radius: 5px;">
+                            <img id="setting-top-img-preview" src=""
+                                style="width:100%; max-height:200px; object-fit:contain; margin-top:10px; display:none; background:#f0f0f0;">
+                            <button id="btn-clear-top-img" class="btn-outline mt-2"
+                                style="font-size:0.8rem; padding: 5px 10px; display:none;">画像を削除</button>
+                        </div>
+                        <hr class="my-4" style="margin-top: 2rem; margin-bottom: 2rem;">
 
-                <div class="form-group">
-                    <label for="setting-event-name">イベント名</label>
-                    <input type="text" id="setting-event-name">
-                </div>
-                <div class="form-group">
-                    <label for="setting-event-date">開催日</label>
-                    <input type="text" id="setting-event-date" placeholder="例：3/15">
-                </div>
-                <div class="form-group">
-                    <label for="setting-hp-url">SNS・リンク先URL</label>
-                    <input type="url" id="setting-hp-url" placeholder="https://instagram.com/...">
-                </div>
-                <div class="form-group">
-                    <label for="setting-form-notice">予約フォーム上の案内文言</label>
-                    <textarea id="setting-form-notice" rows="3" placeholder="例：事前予約は無料です。当日は10時から窓口で受付します。"
-                        style="width: 100%; padding: 10px; border-radius: 10px; border: 2px solid var(--primary-blue); outline: none; resize: vertical;"></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="setting-completion-notice">予約完了画面の案内文言</label>
-                    <textarea id="setting-completion-notice" rows="3" placeholder="例：スクショを忘れずに！次回以降は有料になる可能性があります。"
-                        style="width: 100%; padding: 10px; border-radius: 10px; border: 2px solid var(--primary-blue); outline: none; resize: vertical;"></textarea>
-                </div>
-                <div class="form-group">
-                    <label for="setting-gas-url">クラウド同期 (Google GAS URL)</label>
-                    <input type="url" id="setting-gas-url" placeholder="https://script.google.com/macros/s/.../exec">
-                    <small style="color: #888;">※釣り大会アプリと同様のGAS URLを入力してください</small>
-                </div>
-                <div id="sync-status-area" class="mb-3" style="font-size: 0.85rem; text-align: right;">
-                    同期状態: <span id="sync-status">未設定</span>
-                </div>
-                <button id="btn-save-settings" class="btn-primary w-100 mb-4">設定を保存</button>
+                        <div class="form-group">
+                            <label for="setting-event-name">イベント名</label>
+                            <input type="text" id="setting-event-name">
+                        </div>
+                        <div class="form-group">
+                            <label for="setting-event-date">開催日</label>
+                            <input type="text" id="setting-event-date" placeholder="例：3/15">
+                        </div>
+                        <div class="form-group">
+                            <label for="setting-hp-url">SNS・リンク先URL</label>
+                            <input type="url" id="setting-hp-url" placeholder="https://instagram.com/...">
+                        </div>
+                        <div class="form-group">
+                            <label for="setting-form-notice">予約フォーム上の案内文言</label>
+                            <textarea id="setting-form-notice" rows="3" placeholder="例：事前予約は無料です。当日は10時から窓口で受付します。"
+                                style="width: 100%; padding: 10px; border-radius: 10px; border: 2px solid var(--primary-blue); outline: none; resize: vertical;"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="setting-completion-notice">予約完了画面の案内文言</label>
+                            <textarea id="setting-completion-notice" rows="3"
+                                placeholder="例：スクショを忘れずに！次回以降は有料になる可能性があります。"
+                                style="width: 100%; padding: 10px; border-radius: 10px; border: 2px solid var(--primary-blue); outline: none; resize: vertical;"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label for="setting-gas-url">クラウド同期 (Google GAS URL)</label>
+                            <input type="url" id="setting-gas-url"
+                                placeholder="https://script.google.com/macros/s/.../exec">
+                            <small style="color: #888;">※釣り大会アプリと同様のGAS URLを入力してください</small>
+                        </div>
+                        <div id="sync-status-area" class="mb-3" style="font-size: 0.85rem; text-align: right;">
+                            同期状態: <span id="sync-status">未設定</span>
+                        </div>
+                        <button id="btn-save-settings" class="btn-primary w-100 mb-4">設定を保存</button>
+                    </div>
+        </section>
 
-                <hr class="mb-4">
+        <!-- Data Management View (データ管理) -->
+        <section id="data-management-view" class="view">
+            <div class="card" style="max-width: 600px; margin: 0 auto;">
+                <div class="card-header">
+                    <h2>💾 データ管理</h2>
+                    <p style="text-align:center; font-size:0.9rem; margin-bottom:1rem;">データのバックアップやテスト用機能</p>
+                </div>
 
                 <div class="card p-3 mb-4" style="background-color: #f8f9fa; border: 2px dashed #ccc;">
                     <h3 style="margin-bottom: 10px;">💾 データのお引越し（バックアップ／復元）</h3>
@@ -387,11 +446,32 @@
                     </label>
                 </div>
 
+                <div class="card p-3 mb-4" style="background-color: #f7fcff; border: 2px solid #90caf9;">
+                    <h3 style="margin-bottom: 10px;">☁️ クラウド同期</h3>
+                    <p style="font-size: 0.85rem; color: #555; margin-bottom: 15px;">
+                        iPadのデータをクラウド(スプレッドシート)へ強制的に送信します。<br>
+                        「別のiPadと内容が合わない」「スプレッドシートに反映されない」時に押してください。
+                    </p>
+                    <button id="btn-force-sync" class="btn-primary w-100" style="background-color: #2196f3;">☁️
+                        今すぐクラウドへ強制送信</button>
+                </div>
+
                 <button id="btn-export-csv" class="btn-outline w-100 mb-4">📥 CSV出力 (予約名簿)</button>
 
+                <hr class="mb-4">
+
+                <h3 style="margin-bottom: 1rem;">🧪 テスト・開発用機能</h3>
                 <button id="btn-generate-test-products" class="btn-secondary w-100 mb-2">テスト用商品を登録する</button>
-                <button id="btn-generate-test" class="btn-secondary w-100 mb-2">テスト用名簿データを10名分ずつ生成</button>
-                <button id="btn-clear-all" class="btn-danger w-100">⚠️ 名簿と売上データをリセットする</button>
+                <button id="btn-generate-test" class="btn-secondary w-100 mb-4">テスト用名簿データを10名分ずつ生成</button>
+
+                <hr class="mb-4">
+
+                <h3 style="margin-bottom: 1rem; color: #f44336;">⚠️ 危険な操作</h3>
+                <button id="btn-clear-old-sales" class="btn-outline w-100 mb-3"
+                    style="border-color: #ff8a80; color: #ff8a80;">古い売上履歴を削除する (容量確保)</button>
+                <button id="btn-clear-all" class="btn-danger w-100">名簿と売上データをリセットする</button>
+                <p style="font-size: 0.8rem; color: #888; margin-top: 10px;">※本番前やイベント終了後にデータを空にする際に使用します。商品情報は消えません。
+                </p>
             </div>
         </section>
     </main>
@@ -401,6 +481,8 @@
         <p>&copy; 2026 シール交換会 実行委員会 <span id="admin-reveal-dot" class="admin-dot">.</span></p>
     </footer>
 
+    <!-- QRコード生成ライブラリ (QRCode.js) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="script.js"></script>
 </body>
 
