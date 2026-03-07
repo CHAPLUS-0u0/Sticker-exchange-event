@@ -437,42 +437,67 @@
                         別の端末（iPadなど）へデータを移す場合は、ここで「データを保存」し、移動先の端末で「読み込み」してください。<br>
                         ※商品画像、予約名簿、売上など全ての設定データが含まれます。
                     </p>
-                    <button id="btn-export-backup" class="btn-primary w-100 mb-2"
-                        style="background-color: var(--primary-blue);">📤 全データを保存する (.json)</button>
-                    <label class="btn-outline w-100"
-                        style="display: block; text-align: center; cursor: pointer; margin-bottom: 0;">
-                        📥 保存したデータを読み込む (復元)
-                        <input type="file" id="input-import-backup" accept=".json" style="display: none;">
-                    </label>
-                </div>
+                    <div class="card p-3 mb-4" style="background-color: #f7fcff; border: 2px solid #90caf9;">
+                        <h3 style="margin-bottom: 10px;">☁️ クラウド同期</h3>
+                        <p style="font-size: 0.85rem; color: #555; margin-bottom: 10px;">
+                            最新の状態をクラウドに送信します。
+                        </p>
+                        <button id="btn-force-sync" class="btn-primary w-100 mb-2">☁️ 今すぐクラウドへ強制送信</button>
+                        <div id="sync-status" style="font-size: 0.8rem; text-align: center; color: #888;">(同期状況を表示中...)
+                        </div>
+                    </div>
 
-                <div class="card p-3 mb-4" style="background-color: #f7fcff; border: 2px solid #90caf9;">
-                    <h3 style="margin-bottom: 10px;">☁️ クラウド同期</h3>
-                    <p style="font-size: 0.85rem; color: #555; margin-bottom: 15px;">
-                        iPadのデータをクラウド(スプレッドシート)へ強制的に送信します。<br>
-                        「別のiPadと内容が合わない」「スプレッドシートに反映されない」時に押してください。
+                    <div class="card p-3 mb-4" style="background-color: #fff8e1; border: 2px solid #ffcc80;">
+                        <h3 style="margin-bottom: 10px;">📦 ストレージ使用量</h3>
+                        <div id="storage-usage-container"
+                            style="width: 100%; height: 20px; background: #eee; border-radius: 10px; overflow: hidden; margin-bottom: 5px;">
+                            <div id="storage-usage-bar"
+                                style="width: 0%; height: 100%; background: var(--primary-pink); transition: width 0.3s;">
+                            </div>
+                        </div>
+                        <p id="storage-usage-text" style="font-size: 0.85rem; color: #666; margin-bottom: 0;">使用量: 0KB /
+                            5000KB (0%)</p>
+                        <p style="font-size: 0.75rem; color: #888; margin-top: 5px;">※ブラウザの制限(5MB)を超えると保存できなくなります。</p>
+                    </div>
+
+                    <div class="card p-3 mb-4" style="background-color: #f5f5f5; border: 2px solid #ddd;">
+                        <h3 style="margin-bottom: 10px;">🔍 診断用ログ</h3>
+                        <div id="debug-log-area"
+                            style="font-family: monospace; font-size: 0.75rem; background: #333; color: #0f0; padding: 10px; border-radius: 5px; height: 120px; overflow-y: auto; white-space: pre-wrap; margin-bottom: 10px;">
+                        </div>
+                        <button id="btn-copy-debug-log" class="btn-outline w-100"
+                            style="font-size: 0.8rem;">ログをコピーする</button>
+                    </div>
+
+                    <button id="btn-export-csv" class="btn-outline w-100 mb-4">📥 CSV出力 (予約名簿)</button>
+
+                    <div class="form-group mb-4">
+                        <label>バックアップ (全データ出力)</label>
+                        <button id="btn-export-backup" class="btn-primary w-100 mb-2"
+                            style="background-color: var(--primary-blue);">📤 全データを保存する (.json)</button>
+                        <label class="btn-outline w-100"
+                            style="display: block; text-align: center; cursor: pointer; margin-bottom: 0;">
+                            📥 保存したデータを読み込む (復元)
+                            <input type="file" id="input-import-backup" accept=".json" style="display: none;">
+                        </label>
+                    </div>
+
+                    <hr class="mb-4">
+
+                    <h3 style="margin-bottom: 1rem;">🧪 テスト・開発用機能</h3>
+                    <button id="btn-generate-test-products" class="btn-secondary w-100 mb-2">テスト用商品を登録する</button>
+                    <button id="btn-generate-test" class="btn-secondary w-100 mb-4">テスト用名簿データを10名分ずつ生成</button>
+
+                    <hr class="mb-4">
+
+                    <h3 style="margin-bottom: 1rem; color: #f44336;">⚠️ 危険な操作</h3>
+                    <button id="btn-clear-old-sales" class="btn-outline w-100 mb-3"
+                        style="border-color: #ff8a80; color: #ff8a80;">古い売上履歴を削除する (容量確保)</button>
+                    <button id="btn-clear-all" class="btn-danger w-100">名簿と売上データをリセットする</button>
+                    <p style="font-size: 0.8rem; color: #888; margin-top: 10px;">
+                        ※本番前やイベント終了後にデータを空にする際に使用します。商品情報は消えません。
                     </p>
-                    <button id="btn-force-sync" class="btn-primary w-100" style="background-color: #2196f3;">☁️
-                        今すぐクラウドへ強制送信</button>
                 </div>
-
-                <button id="btn-export-csv" class="btn-outline w-100 mb-4">📥 CSV出力 (予約名簿)</button>
-
-                <hr class="mb-4">
-
-                <h3 style="margin-bottom: 1rem;">🧪 テスト・開発用機能</h3>
-                <button id="btn-generate-test-products" class="btn-secondary w-100 mb-2">テスト用商品を登録する</button>
-                <button id="btn-generate-test" class="btn-secondary w-100 mb-4">テスト用名簿データを10名分ずつ生成</button>
-
-                <hr class="mb-4">
-
-                <h3 style="margin-bottom: 1rem; color: #f44336;">⚠️ 危険な操作</h3>
-                <button id="btn-clear-old-sales" class="btn-outline w-100 mb-3"
-                    style="border-color: #ff8a80; color: #ff8a80;">古い売上履歴を削除する (容量確保)</button>
-                <button id="btn-clear-all" class="btn-danger w-100">名簿と売上データをリセットする</button>
-                <p style="font-size: 0.8rem; color: #888; margin-top: 10px;">※本番前やイベント終了後にデータを空にする際に使用します。商品情報は消えません。
-                </p>
-            </div>
         </section>
     </main>
 

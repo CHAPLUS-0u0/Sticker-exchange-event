@@ -22,6 +22,24 @@ let state = {
 
 let isAdminAuth = sessionStorage.getItem('sticker_admin_auth') === 'true';
 let currentCart = [];
+let debugLogs = [];
+
+/**
+ * 診断用のログを記録し、画面に表示する
+ */
+function addLog(msg, type = "info") {
+    const now = new Date();
+    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}`;
+    const logMsg = `[${timeStr}] ${msg}`;
+    console.log(logMsg);
+    debugLogs.unshift(logMsg);
+    if (debugLogs.length > 100) debugLogs.pop();
+
+    const logArea = document.getElementById('debug-log-area');
+    if (logArea) {
+        logArea.textContent = debugLogs.join('\n');
+    }
+}
 
 const slots = {
     slot1: { name: "10:00–10:30", prefix: "①", type: "pre" },
@@ -115,44 +133,47 @@ async function loadData() {
 
             if (response.ok) {
                 const cloudData = await response.json();
-                if (cloudData) {
+                if (cloudData && typeof cloudData === 'object') {
                     const localTime = state.lastUpdated || 0;
                     const cloudTime = cloudData.lastUpdated || 0;
 
-                    // 単純な上書きではなく、コレクションごとにマージを行う
-                    console.log(`Syncing: Local(${localTime}) vs Cloud(${cloudTime})`);
+                    addLog(`同期中: ローカル(${new Date(localTime).toLocaleTimeString()}) vs クラウド(${new Date(cloudTime).toLocaleTimeString()})`);
 
-                    // 1. 配列データのマージ
+                    // 1. 配列データのマージ (ローカルにしかないデータは消さない)
                     state.entries = mergeCollections(state.entries || [], cloudData.entries || []);
                     state.sales = mergeCollections(state.sales || [], cloudData.sales || []);
+                    state.products = mergeCollections(state.products || [], cloudData.products || []);
 
-                    // 商品データは特に慎重にマージ
-                    const localProducts = state.products || [];
-                    const cloudProducts = cloudData.products || [];
-                    state.products = mergeCollections(localProducts, cloudProducts);
-
-                    // 2. 設定とカウントは新しい方を優先
+                    // 2. 設定とカウントの同期
+                    // クラウドの方が新しければ、設定とカウントを上書き
                     if (cloudTime > localTime) {
+                        addLog("クラウドのデータが新しいため、設定とカウントを更新します");
                         state.settings = {
                             ...state.settings,
                             ...cloudData.settings,
                             gasUrl: HARDCODED_GAS_URL
                         };
-                        // slotCounts (当日受付数) の同期
                         if (cloudData.slotCounts) {
                             state.slotCounts = cloudData.slotCounts;
                         }
                         state.lastUpdated = cloudTime;
-                        // 設定画面の入力欄を更新
                         applySettingsToInputs();
                         updateSettingsUI();
+                    } else if (localTime > cloudTime) {
+                        addLog("ローカルのデータの方が新しいため、クラウドへ送信を予約します");
                     }
+
+                    // 保存前に再検証
+                    if (!Array.isArray(state.entries)) state.entries = [];
+                    if (!Array.isArray(state.products)) state.products = [];
 
                     localStorage.setItem('sticker_exchange_data', JSON.stringify(state));
 
                     if (localTime >= cloudTime) {
                         syncToCloud();
                     }
+                } else {
+                    addLog("⚠️ クラウドデータが空または不正形式です", "warn");
                 }
                 // recalculateSlotCounts() は手入力分を消去してしまうため呼ばないか、
                 // あるいは当日分を別で合算するように修正が必要。
@@ -171,18 +192,49 @@ async function loadData() {
 function saveData() {
     state.lastUpdated = Date.now();
     try {
-        localStorage.setItem('sticker_exchange_data', JSON.stringify(state));
-        console.log("Data saved to localStorage. items:", state.entries.length);
+        const json = JSON.stringify(state);
+        localStorage.setItem('sticker_exchange_data', json);
+        addLog(`保存完了: ${state.entries.length}件の名簿, ${state.products.length}点の商品`);
     } catch (e) {
+        addLog(`⚠️ 保存失敗: ${e.message}`, "error");
         console.error("Save failed:", e);
         if (e.name === 'QuotaExceededError' || e.code === 22) {
-            alert("⚠️ 保存容量がいっぱいです！\n古い売上履歴を削除するか、不要な商品を削除して空き容量を増やしてください。");
+            alert("⚠️ 保存容量がいっぱいです！\n不要な「売上履歴」を削除するか、商品画像を減らしてください。");
         } else {
             alert("⚠️ 保存中にエラーが発生しました。");
         }
     }
     updateTodaySales();
+    updateStorageUsage();
     syncToCloud();
+}
+
+/**
+ * ブラウザの保存容量の使用状況を計算して表示する
+ */
+function updateStorageUsage() {
+    try {
+        const json = JSON.stringify(state);
+        const sizeInBytes = new Blob([json]).size;
+        const sizeInKb = Math.round(sizeInBytes / 1024);
+        const limitKb = 5000; // 一般的な5MB制限
+        const percent = Math.min(100, Math.round((sizeInKb / limitKb) * 100));
+
+        const bar = document.getElementById('storage-usage-bar');
+        const text = document.getElementById('storage-usage-text');
+        if (bar) bar.style.width = percent + "%";
+        if (text) text.textContent = `使用量: ${sizeInKb}KB / ${limitKb}KB (${percent}%)`;
+
+        if (percent > 90) {
+            if (bar) bar.style.background = "#f44336";
+        } else if (percent > 70) {
+            if (bar) bar.style.background = "#ff9800";
+        } else {
+            if (bar) bar.style.background = "var(--primary-pink)";
+        }
+    } catch (e) {
+        console.warn("Usage calc failed:", e);
+    }
 }
 
 function updateSyncStatus(status) {
@@ -221,10 +273,10 @@ async function syncToCloud() {
             mode: 'no-cors'
         });
 
-        // no-corsではレスポンス内容は見れないが、到達はしたとみなす
+        addLog(`クラウドへ送信完了 (${payload.length} bytes)`);
         updateSyncStatus('success');
-        console.log("Sync: Data sent (no-cors mode)");
     } catch (e) {
+        addLog(`⚠️ クラウド送信失敗: ${e.message}`, "error");
         console.error("Sync: Cloud push failed:", e);
         updateSyncStatus('error');
     }
@@ -238,32 +290,28 @@ async function forceSyncToCloud() {
     alert("クラウドへデータを送信しました✨\nスプレッドシート側を確認してください。");
 }
 
-/**
- * 二つのコレクション（オブジェクトの配列）をIDに基づいてマージする
- * @param {Array} localLocal 
- * @param {Array} cloudRemote 
- * @returns {Array} マージされた配列
- */
 function mergeCollections(local, cloud) {
     if (!Array.isArray(cloud)) return local || [];
     if (!Array.isArray(local)) return cloud || [];
 
-    const merged = [...local];
-    const localIds = new Set(local.map(item => item.id));
+    // IDをキーにしたマップを作成してマージを高速化 & 確実化
+    const map = new Map();
 
-    cloud.forEach(cloudItem => {
-        if (!localIds.has(cloudItem.id)) {
-            merged.push(cloudItem);
-        } else {
-            // IDが重複する場合、基本的には「新しい方」を採用したいが、
-            // 簡易化のため一旦local側（現在の操作）を優先しつつ
-            // もしCloud側にしか無いプロパティがあれば補完するなどの拡張が可能
-            const localIndex = merged.findIndex(item => item.id === cloudItem.id);
-            // タイムスタンプがあれば比較するロジックも追加可能
+    // 1. クラウド側のデータを先に入れる
+    cloud.forEach(item => {
+        if (item && item.id) map.set(item.id, item);
+    });
+
+    // 2. ローカル側のデータで上書き（ローカル優先）
+    local.forEach(item => {
+        if (item && item.id) {
+            // すでにIDが存在する場合、基本的にはローカルの方が「今現在の操作」なので優先
+            // ただし、もし個別のタイムスタンプがあれば比較するのもあり
+            map.set(item.id, item);
         }
     });
 
-    return merged;
+    return Array.from(map.values());
 }
 
 // アクセス制御
@@ -520,12 +568,20 @@ function initApp() {
         }
     });
 
-    // ---- 短縮URL・QRコード機能 (ライブラリ未読込でも落ちないように保護) ----
-    try {
-        initShortUrlFeatures();
-    } catch (e) {
-        console.error("ShortUrl init failed:", e);
+    // ---- 診断ログ機能 ----
+    const btnCopyLog = document.getElementById('btn-copy-debug-log');
+    if (btnCopyLog) {
+        btnCopyLog.addEventListener('click', () => {
+            const logs = debugLogs.join('\n');
+            navigator.clipboard.writeText(logs).then(() => {
+                alert("ログをコピーしました📋 正確な診断のため、チャットへ貼り付けてください。");
+            });
+        });
     }
+
+    // 起動時の初期ログ
+    addLog("アプリを起動しました");
+    updateStorageUsage();
 }
 
 function initShortUrlFeatures() {
