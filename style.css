@@ -960,9 +960,9 @@ hr {
 
 /* 受付済み行のスタイル (背景色は上書きせず、グレースケールと透明度で表現) */
 .data-table tr.checked-in {
-    filter: grayscale(0.8) opacity(0.6);
+    filter: grayscale(0.4) opacity(0.85);
+    /* 色を完全に消さない */
     background-color: transparent;
-    /* スロット側の色を活かす */
 }
 
 /* Responsive Adjustments */

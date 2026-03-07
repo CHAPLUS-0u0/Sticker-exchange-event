@@ -1272,20 +1272,23 @@ function handleNumberCheck() {
     const prefix = slots[slotId] && slots[slotId].prefix ? `${slots[slotId].prefix}-` : "";
     const searchObjNumber = prefix + formattedInput;
 
-    // 1. 予約名簿から検索 (現在の時間帯のスロット内でのみ探すので、他の時間帯の人は絶対に出ない)
+    // 1. 予約名簿から検索 (全ての時間帯から探す)
     const entry = state.entries.find(en =>
-        en.slotId === slotId &&
-        (en.number === inputVal || en.number === searchObjNumber || en.number.endsWith(formattedInput))
+        en.number === inputVal || en.number === searchObjNumber || en.number.endsWith(formattedInput)
     );
 
     if (entry) {
         if (entry.status === 'checked-in') {
             alert(`整理番号 ${entry.number} は既に受付済みです。`);
         } else {
-            // 受付済みにする (toggleCheckIn がカウンターを更新する)
+            // 他の時間帯の予約だった場合、確認を求める
+            if (entry.slotId !== slotId) {
+                if (!confirm(`この方は別の時間帯(${entry.slotName})の予約ですが、そのまま受付しますか？`)) return;
+            }
+            // 受付済みにする
             toggleCheckIn(entry.id);
             alert(`予約確認: ${entry.name} 様（${entry.number}）を「受付済」にしました✨`);
-            updatePOSSuggestions(); // サジェストリストからも削除
+            updatePOSSuggestions();
         }
     } else {
         // 2. 名簿にない場合 (当日整理券など)
@@ -1606,24 +1609,7 @@ function downloadBlob(csvContent, filename) {
     document.body.removeChild(link);
 }
 
-/**
- * 名簿データ(entries)から各スロットの受付済み人数を正確に再計算する
- */
-function recalculateSlotCounts() {
-    // 一旦リセット
-    state.slotCounts = {};
-    Object.keys(slots).forEach(sid => state.slotCounts[sid] = 0);
-
-    // 受付済みの人をカウント
-    if (Array.isArray(state.entries)) {
-        state.entries.forEach(en => {
-            if (en.status === 'checked-in') {
-                if (!state.slotCounts[en.slotId]) state.slotCounts[en.slotId] = 0;
-                state.slotCounts[en.slotId]++;
-            }
-        });
-    }
-}
+// recalculateSlotCounts は予約分と当日分を混同するため廃止しました
 
 // --- テスト商品生成 (保存容量を節約するため少なめに) ---
 function generateTestProducts() {
