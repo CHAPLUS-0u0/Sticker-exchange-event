@@ -196,12 +196,14 @@ function saveData() {
         localStorage.setItem('sticker_exchange_data', json);
         addLog(`保存完了: ${state.entries.length}件の名簿, ${state.products.length}点の商品`);
     } catch (e) {
-        addLog(`⚠️ 保存失敗: ${e.message}`, "error");
+        addLog(`保存失敗: ${e.message}`, "error");
         console.error("Save failed:", e);
         if (e.name === 'QuotaExceededError' || e.code === 22) {
-            alert("⚠️ 保存容量がいっぱいです！\n不要な「売上履歴」を削除するか、商品画像を減らしてください。");
+            // alertを毎回出すと邪魔なので、ログ記録のみに留める（UIのバーで警告を表示中）
+            addLog("⚠️ ストレージ容量限界！古いデータを削除してください。", "error");
         } else {
-            alert("⚠️ 保存中にエラーが発生しました。");
+            // それ以外の致命的エラーは一回は知らせる
+            addLog(`⚠️ 保存エラー: ${e.message}`, "error");
         }
     }
     updateTodaySales();
@@ -582,6 +584,13 @@ function initApp() {
     // 起動時の初期ログ
     addLog("アプリを起動しました");
     updateStorageUsage();
+
+    // QRコードとURLシェア機能を初期化
+    try {
+        initShortUrlFeatures();
+    } catch (e) {
+        addLog(`QR初期化失敗: ${e.message}`, "error");
+    }
 }
 
 function initShortUrlFeatures() {
