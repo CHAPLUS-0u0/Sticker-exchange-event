@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>シール交換会✨受付</title>
-    <link rel="stylesheet" href="style.css?v=20260307-1920">
+    <link rel="stylesheet" href="style.css?v=20260307-1930">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
@@ -442,7 +442,9 @@
                         <p style="font-size: 0.85rem; color: #555; margin-bottom: 10px;">
                             最新の状態をクラウドに送信します。
                         </p>
-                        <button id="btn-force-sync" class="btn-primary w-100 mb-2">☁️ 今すぐクラウドへ強制送信</button>
+                        <button id="btn-force-sync" class="btn-primary w-100 mb-2">☁️ 今すぐクラウドへ送信（バックアップ）</button>
+                        <button id="id-pull-sync" class="btn-outline w-100 mb-2"
+                            style="border-color:#90caf9; color:#1976d2;">☁️ クラウドから取得（復元）</button>
                         <div id="sync-status" style="font-size: 0.8rem; text-align: center; color: #888;">(同期状況を表示中...)
                         </div>
                     </div>
@@ -508,7 +510,7 @@
 
     <!-- QRコード生成ライブラリ (QRCode.js) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <script src="script.js?v=20260307-1920"></script>
+    <script src="script.js?v=20260307-1930"></script>
 </body>
 
 </html>

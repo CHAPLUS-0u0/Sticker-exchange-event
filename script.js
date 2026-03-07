@@ -90,104 +90,35 @@ function refreshActiveView() {
 }
 
 async function loadData() {
-    console.log("--- Loading Data ---");
+    addLog("データ読み込み開始...");
     const saved = localStorage.getItem('sticker_exchange_data');
-    // ... (existing deserialization)
     if (saved) {
         try {
             const data = JSON.parse(saved);
-            // stateオブジェクトの参照を壊さないようにプロパティ単位で更新
+            if (data.settings) state.settings = { ...state.settings, ...data.settings };
             if (data.entries) state.entries = data.entries;
             if (data.products) state.products = data.products;
             if (data.sales) state.sales = data.sales;
             if (data.slotCounts) state.slotCounts = data.slotCounts;
-            if (data.settings) state.settings = { ...state.settings, ...data.settings };
             if (data.lastUpdated) state.lastUpdated = data.lastUpdated;
+            addLog("ローカルデータの読み込みに成功しました。");
         } catch (e) {
-            console.error("Corrupted local data:", e);
-        }
-        // 後方互換性ガード & 配列初期化保証
-        if (!state.settings) state.settings = {};
-        if (!Array.isArray(state.entries)) state.entries = [];
-        if (!Array.isArray(state.products)) state.products = [];
-        if (!Array.isArray(state.sales)) state.sales = [];
-        if (!state.slotCounts) state.slotCounts = {};
-    }
-
-    // ハードコードされたGAS URLを常に適用
-    const HARDCODED_GAS_URL = "https://script.google.com/macros/s/AKfycbxKqkvvSDLWc2M6NkxzyMJ9_8DWPspAfQWUB6fOi6gVRDRmgvW50V9jzrX1uNWDTa9k/exec";
-    if (state.settings) {
-        state.settings.gasUrl = HARDCODED_GAS_URL;
-        if (!state.settings.capacityPerSlot) state.settings.capacityPerSlot = 20;
-    }
-
-    // 2. クラウド同期 (URLが設定されている場合)
-    if (state.settings.gasUrl) {
-        updateSyncStatus('syncing');
-        try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 8000);
-
-            const response = await fetch(`${state.settings.gasUrl}?action=get`, { signal: controller.signal });
-            clearTimeout(timeoutId);
-
-            if (response.ok) {
-                const cloudData = await response.json();
-                if (cloudData && typeof cloudData === 'object') {
-                    const localTime = state.lastUpdated || 0;
-                    const cloudTime = cloudData.lastUpdated || 0;
-
-                    addLog(`同期中: ローカル(${new Date(localTime).toLocaleTimeString()}) vs クラウド(${new Date(cloudTime).toLocaleTimeString()})`);
-
-                    // 1. 配列データのマージ (ローカルにしかないデータは消さない)
-                    state.entries = mergeCollections(state.entries || [], cloudData.entries || []);
-                    state.sales = mergeCollections(state.sales || [], cloudData.sales || []);
-                    state.products = mergeCollections(state.products || [], cloudData.products || []);
-
-                    // 2. 設定とカウントの同期
-                    // クラウドの方が新しければ、設定とカウントを上書き
-                    if (cloudTime > localTime) {
-                        addLog("クラウドのデータが新しいため、設定とカウントを更新します");
-                        state.settings = {
-                            ...state.settings,
-                            ...cloudData.settings,
-                            gasUrl: HARDCODED_GAS_URL
-                        };
-                        if (cloudData.slotCounts) {
-                            state.slotCounts = cloudData.slotCounts;
-                        }
-                        state.lastUpdated = cloudTime;
-                        applySettingsToInputs();
-                        updateSettingsUI();
-                    } else if (localTime > cloudTime) {
-                        addLog("ローカルのデータの方が新しいため、クラウドへ送信を予約します");
-                    }
-
-                    // 保存前に再検証
-                    if (!Array.isArray(state.entries)) state.entries = [];
-                    if (!Array.isArray(state.products)) state.products = [];
-
-                    localStorage.setItem('sticker_exchange_data', JSON.stringify(state));
-
-                    if (localTime >= cloudTime) {
-                        syncToCloud();
-                    }
-                } else {
-                    addLog("⚠️ クラウドデータが空または不正形式です", "warn");
-                }
-                // recalculateSlotCounts() は手入力分を消去してしまうため呼ばないか、
-                // あるいは当日分を別で合算するように修正が必要。
-                // 今回は「当日受付」と「予約分」を分けたため、
-                // 手入力分である slotCounts を recalculate で上書きしてはいけない。
-
-                updateSyncStatus('success');
-            }
-        } catch (e) {
-            console.warn("Cloud load failed:", e);
-            updateSyncStatus('error');
+            addLog("ローカルデータの解析に失敗しました。", "error");
         }
     }
+    if (!Array.isArray(state.entries)) state.entries = [];
+    if (!Array.isArray(state.products)) state.products = [];
+    if (!Array.isArray(state.sales)) state.sales = [];
+    if (!state.slotCounts) state.slotCounts = {};
+
+    applySettingsToInputs();
+    updateSettingsUI();
+    updateTodaySales();
+    updateStorageUsage();
 }
+
+
+// データ同期機能は「データ管理」タブのボタンから手動で行う形式に整理しました
 
 function saveData() {
     state.lastUpdated = Date.now();
@@ -285,11 +216,56 @@ async function syncToCloud() {
 }
 
 async function forceSyncToCloud() {
-    if (!confirm("現在のiPadのデータをクラウド(スプレッドシート)に強制的に上書き送信します。よろしいですか？\n※他の端末で入力したデータよりこちらが優先されます。")) return;
+    if (!confirm("現在のiPadのデータをクラウド(スプレッドシート)に送信します。よろしいですか？\n※他の端末で入力したデータよりこちらが優先されます。")) return;
 
     state.lastUpdated = Date.now(); // タイムスタンプを強制更新
     saveData();
-    alert("クラウドへデータを送信しました✨\nスプレッドシート側を確認してください。");
+    alert("クラウドへデータを送信（バックアップ）しました✨");
+}
+
+async function pullFromCloud() {
+    if (!state.settings.gasUrl) {
+        alert("GAS URLが設定されていません。");
+        return;
+    }
+    if (!confirm("クラウドからデータを取得して復元しますか？\n現在の名簿や売上データが、クラウドの内容とマージ（統合）されます。")) return;
+
+    addLog("クラウドからデータ取得中...");
+    updateSyncStatus('syncing');
+    try {
+        const response = await fetch(`${state.settings.gasUrl}?action=get`);
+        if (response.ok) {
+            const cloudData = await response.json();
+            if (cloudData && typeof cloudData === 'object') {
+                // 配列データのマージ
+                state.entries = mergeCollections(state.entries || [], cloudData.entries || []);
+                state.sales = mergeCollections(state.sales || [], cloudData.sales || []);
+                state.products = mergeCollections(state.products || [], cloudData.products || []);
+
+                // カウントと設定は、クラウドの方が新しければ採用
+                if ((cloudData.lastUpdated || 0) > (state.lastUpdated || 0)) {
+                    state.settings = { ...state.settings, ...cloudData.settings };
+                    state.slotCounts = cloudData.slotCounts || state.slotCounts;
+                    state.lastUpdated = cloudData.lastUpdated;
+                }
+
+                saveData();
+                addLog("クラウドからの復元が完了しました。");
+                alert("✅ 復元が完了しました！内容を反映するため再読み込みします。");
+                location.reload();
+            } else {
+                addLog("クラウドデータが不正です", "error");
+                alert("❌ クラウドデータの形式が正しくありません。");
+            }
+        } else {
+            addLog(`クラウド取得失敗: ${response.status}`, "error");
+            alert("❌ クラウドからデータを取得できませんでした。");
+        }
+    } catch (e) {
+        addLog(`通信エラー: ${e.message}`, "error");
+        alert("❌ 通信エラーが発生しました。");
+    }
+    updateSyncStatus('success');
 }
 
 function mergeCollections(local, cloud) {
@@ -427,10 +403,19 @@ function initApp() {
         saveData();
         updateSettingsUI();
         applySettingsToInputs(); // 保存後に再同期
-        alert("設定を保存しました✨");
+
+        const btnSave = document.getElementById('btn-save-settings');
+        const originalText = btnSave.textContent;
+        btnSave.textContent = "✅ 設定を保存しました";
+        btnSave.classList.add('btn-success');
+        setTimeout(() => {
+            btnSave.textContent = originalText;
+            btnSave.classList.remove('btn-success');
+        }, 2000);
     });
 
     document.getElementById('btn-force-sync').addEventListener('click', forceSyncToCloud);
+    document.getElementById('id-pull-sync').addEventListener('click', pullFromCloud);
 
     // TOP画像アップロード処理
     document.getElementById('setting-top-img').addEventListener('change', (e) => {
