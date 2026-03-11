@@ -211,6 +211,9 @@ async function syncToCloud(isNotify = false, newEntry = null) {
         if (payload.length > 50000) {
             console.warn("Payload size exceeds Google Sheets cell limit.");
             addLog("⚠️ クラウド保存容量オーバー。画像が大きすぎる可能性があります。", "error");
+            alert("⚠️ クラウドへの保存容量を超えています！\n画像が大きすぎるか、データが多すぎます。画像をさらに小さくするか、商品を減らして試してください。");
+            updateSyncStatus('error');
+            return; // 送信自体を中止
         }
 
         const response = await fetch(state.settings.gasUrl, {
