@@ -763,7 +763,7 @@ function initApp() {
     // バージョンラベル更新
     const versionEl = document.getElementById('app-version-display');
     if (versionEl) {
-        versionEl.textContent = `Version: 20260311-1600`;
+        versionEl.textContent = `Version: 20260311-1610`;
     }
 
     // QRコードとURLシェア機能を初期化
@@ -906,10 +906,11 @@ function updateSettingsUI() {
 
 // 画面切り替え
 function switchView(btn, targetId, shouldSave = true) {
-    if (btn) {
-        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-    }
+    // ボタンのactiveクラス管理
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+
+    // Sectionのactiveクラス管理
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
     const targetEl = document.getElementById(targetId);
     if (targetEl) {
@@ -920,7 +921,12 @@ function switchView(btn, targetId, shouldSave = true) {
         }
     }
 
+    if (targetId === 'top-view' || targetId === 'registration-view') {
+        silentSyncFromCloud();
+    }
+
     if (targetId === 'top-view') updateSettingsUI();
+    if (targetId === 'registration-view') populateSlotSelects();
     if (targetId === 'admin-view') {
         updateSettingsUI();
         applySettingsToInputs(); // 管理画面に入るたびに最新状態を同期
@@ -970,18 +976,37 @@ function populateSlotSelects() {
     });
 }
 
-function handleRegistration(e) {
+async function handleRegistration(e) {
     e.preventDefault();
+    const submitBtn = document.getElementById('btn-submit-registration');
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = '同期中...';
+    }
+
+    // 1. 同期して最新の名簿にする（番号の重複を防ぐ）
+    await silentSyncFromCloud();
+
     const selectedSlotId = document.getElementById('reg-slot').value;
     const userName = document.getElementById('user-name').value.trim();
     const userPhone = document.getElementById('user-phone').value.trim();
 
-    if (!selectedSlotId || !userName || !userPhone) return;
+    if (!selectedSlotId || !userName || !userPhone) {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '💖 予約フォームへすすむ';
+        }
+        return;
+    }
 
     const countInSlot = state.entries.filter(en => en.slotId === selectedSlotId).length;
     if (countInSlot >= state.settings.capacityPerSlot) {
         alert("ごめんなさい！この時間枠は定員に達しました。");
         populateSlotSelects(); // UI更新
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '💖 予約フォームへすすむ';
+        }
         return;
     }
 
@@ -1001,7 +1026,7 @@ function handleRegistration(e) {
     };
 
     state.entries.push(newEntry);
-    saveData(true, newEntry); // 新規予約の通知を飛ばす
+    await saveData(true, newEntry); // 新規予約の通知を飛ばす（完了を待つ）
     populateSlotSelects();
 
     // 申込完了画面の表示
