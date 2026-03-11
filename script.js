@@ -223,21 +223,25 @@ async function syncToCloud(isNotify = false, newEntry = null) {
 
         const fullJson = JSON.stringify(payloadObj);
 
-        // --- チャンキング（分割）ロジック ---
-        // 1セル辺りの上限(5万文字)を意識し、45,000文字ずつに分割
-        const CHUNK_SIZE = 45000;
-        const chunks = [];
-        for (let i = 0; i < fullJson.length; i += CHUNK_SIZE) {
-            chunks.push(fullJson.substring(i, i + CHUNK_SIZE));
+        // --- 送信用データ作成 ---
+        let payload;
+        if (isNotify && newEntry && !isAdminAuth) {
+            // お客様側の登録時は、チャンク化せず直接送る（GAS側で「追加モード」として認識させるため）
+            payload = JSON.stringify(payloadObj);
+        } else {
+            // 通常の保存（管理者のPushなど）は、大容量に備えてチャンク化（分割）
+            const CHUNK_SIZE = 45000;
+            const chunks = [];
+            for (let i = 0; i < fullJson.length; i += CHUNK_SIZE) {
+                chunks.push(fullJson.substring(i, i + CHUNK_SIZE));
+            }
+            addLog(`クラウド送信準備: ${fullJson.length}文字 (${chunks.length}分割)`);
+            payload = JSON.stringify({
+                chunks: chunks,
+                isNotify: !!isNotify,
+                newEntry: newEntry
+            });
         }
-
-        addLog(`クラウド送信準備: ${fullJson.length}文字 (${chunks.length}分割)`);
-
-        const payload = JSON.stringify({
-            chunks: chunks,
-            isNotify: !!isNotify,
-            newEntry: newEntry
-        });
 
         const response = await fetch(state.settings.gasUrl, {
             method: 'POST',
