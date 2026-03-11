@@ -267,22 +267,18 @@ async function pullFromCloud() {
             const cloudData = JSON.parse(rawData);
 
             if (cloudData && typeof cloudData === 'object') {
-                // 配列データのマージ
-                state.entries = mergeCollections(state.entries || [], cloudData.entries || []);
-                // ... (マージ処理継続)
-                state.sales = mergeCollections(state.sales || [], cloudData.sales || []);
-                state.products = mergeCollections(state.products || [], cloudData.products || []);
-
-                // 手動での「復元」時は、クラウドにデータがあれば無条件で設定も上書きする（確実にPCの状態に合わせるため）
-                if (cloudData.settings) {
-                    state.settings = { ...state.settings, ...cloudData.settings };
-                    state.slotCounts = cloudData.slotCounts || state.slotCounts;
-                    state.lastUpdated = cloudData.lastUpdated || Date.now();
-                }
+                // 手動での「復元」時は、データをマージせず、クラウドの内容をそのまま正（マスター）として扱う
+                // これにより、PCで消したテスト名簿などがiPhoneでもしっかり消えるようになる
+                if (cloudData.entries) state.entries = cloudData.entries;
+                if (cloudData.sales) state.sales = cloudData.sales;
+                if (cloudData.products) state.products = cloudData.products;
+                if (cloudData.settings) state.settings = { ...state.settings, ...cloudData.settings };
+                if (cloudData.slotCounts) state.slotCounts = cloudData.slotCounts || state.slotCounts;
+                if (cloudData.lastUpdated) state.lastUpdated = cloudData.lastUpdated || Date.now();
 
                 saveData();
-                addLog("クラウドからの復元が完了しました。");
-                alert("✅ 復元が完了しました！内容を反映するため再読み込みします。");
+                addLog("クラウドの最新データで完全に上書き（ミラーリング）しました。");
+                alert("✅ データの完全同期が完了しました！内容を反映するため再読み込みします。");
                 location.reload();
             } else {
                 addLog("クラウドデータが不正です", "error");
@@ -681,7 +677,7 @@ function initApp() {
     // バージョンラベル更新
     const versionEl = document.getElementById('app-version-display');
     if (versionEl) {
-        versionEl.textContent = `Version: 20260311-1500`;
+        versionEl.textContent = `Version: 20260311-1510`;
     }
 
     // QRコードとURLシェア機能を初期化
