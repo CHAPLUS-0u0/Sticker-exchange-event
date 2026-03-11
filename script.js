@@ -325,47 +325,51 @@ async function silentSyncFromCloud() {
         const response = await fetch(`${state.settings.gasUrl}?action=get${cacheBuster}`);
         if (response.ok) {
             const rawData = await response.text();
+            if (!rawData || rawData.trim() === "") return;
+
             const cloudData = JSON.parse(rawData);
             if (cloudData && typeof cloudData === 'object') {
                 const cloudLastUpdated = cloudData.lastUpdated || 0;
                 const localLastUpdated = state.lastUpdated || 0;
 
-                // 自分のPush直後などの微差(5秒)はスキップ
-                if (cloudLastUpdated <= localLastUpdated + 5000) return;
+                // Time Difference Logic (v1590): Ignore if exactly same, otherwise check for newer cloud data.
+                // Removed the 5s buffer to allow immediate sync after PC push.
+                if (cloudLastUpdated === localLastUpdated) return;
 
-                // 管理者（iPad）の場合は、クラウドにあるものを「最新の正解」として取り込む
-                // これによりPCでの削除がiPadにも反映されるようになる
+                if (cloudLastUpdated < localLastUpdated) {
+                    // Cloud is older (maybe waiting for PC push to complete)
+                    if (localLastUpdated - cloudLastUpdated > 60000) {
+                        addLog("[Wait] Cloud is outdated (waiting for PC push)");
+                    }
+                    return;
+                }
+
+                addLog("[Sync] New data detected. Updating...");
+
                 if (isAdminAuth) {
+                    // Mirror mode for Admin/iPad: Cloud is the source of truth (handles deletions)
                     state.entries = cloudData.entries || [];
                     state.sales = mergeCollections(state.sales || [], cloudData.sales || []);
                     state.lastUpdated = cloudLastUpdated;
-                    addLog(`[同期] クラウドから最新データを反映しました(${state.entries.length}件)`);
+                    addLog(`[Sync] Mirrored master data (${state.entries.length} items)`);
                 } else {
-                    // 一般ユーザー（iPhone等）の場合は、既存のマージ（統合）ロジック
+                    // Merge mode for Guests: Add cloud entries to local list
                     const newEntries = mergeCollections(state.entries || [], cloudData.entries || []);
                     const newSales = mergeCollections(state.sales || [], cloudData.sales || []);
-
-                    const count1 = state.entries ? state.entries.length : 0;
-                    const count2 = newEntries.length;
-
-                    if (count1 !== count2) {
-                        state.entries = newEntries;
-                        state.sales = newSales;
-                        state.lastUpdated = cloudLastUpdated;
-                        addLog("[同期] 新しい登録情報を取得しました。");
-                    }
+                    state.entries = newEntries;
+                    state.sales = newSales;
+                    state.lastUpdated = cloudLastUpdated;
+                    addLog("[Sync] Merged new entries from cloud.");
                 }
 
-                // 設定や商品は、クラウドが5秒以上新しい場合のみ反映
-                if (cloudLastUpdated > (localLastUpdated + 5000)) {
+                // Global Settings/Products update
+                if (cloudLastUpdated > localLastUpdated) {
                     state.settings = { ...state.settings, ...cloudData.settings };
                     state.products = cloudData.products || state.products;
-                    if (!isAdminAuth) {
-                        state.lastUpdated = cloudLastUpdated;
-                    }
+                    if (!isAdminAuth) state.lastUpdated = cloudLastUpdated;
                 }
 
-                // 保存
+                // Persistence
                 const json = JSON.stringify(state);
                 localStorage.setItem('sticker_exchange_data', json);
 
@@ -378,7 +382,7 @@ async function silentSyncFromCloud() {
     } catch (e) {
         console.warn("Silent sync failed:", e);
     }
-    updateSyncDiagnostics(); // 統計情報を更新
+    updateSyncDiagnostics();
 }
 
 /**
@@ -755,7 +759,7 @@ function initApp() {
     // バージョンラベル更新
     const versionEl = document.getElementById('app-version-display');
     if (versionEl) {
-        versionEl.textContent = `Version: 20260311-1580`;
+        versionEl.textContent = `Version: 20260311-1590`;
     }
 
     // QRコードとURLシェア機能を初期化
