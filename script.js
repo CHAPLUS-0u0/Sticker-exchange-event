@@ -256,11 +256,11 @@ async function pullFromCloud() {
                 state.sales = mergeCollections(state.sales || [], cloudData.sales || []);
                 state.products = mergeCollections(state.products || [], cloudData.products || []);
 
-                // カウントと設定は、クラウドの方が新しければ採用
-                if ((cloudData.lastUpdated || 0) > (state.lastUpdated || 0)) {
+                // 手動での「復元」時は、クラウドにデータがあれば無条件で設定も上書きする（確実にPCの状態に合わせるため）
+                if (cloudData.settings) {
                     state.settings = { ...state.settings, ...cloudData.settings };
                     state.slotCounts = cloudData.slotCounts || state.slotCounts;
-                    state.lastUpdated = cloudData.lastUpdated;
+                    state.lastUpdated = cloudData.lastUpdated || Date.now();
                 }
 
                 saveData();
@@ -301,8 +301,11 @@ async function silentSyncFromCloud() {
                 const cloudLastUpdated = cloudData.lastUpdated || 0;
                 const localLastUpdated = state.lastUpdated || 0;
 
-                // クラウドの方が新しければ、設定と商品をマージ（予約・売上はローカル優先orマージ）
-                if (cloudLastUpdated > localLastUpdated) {
+                addLog(`同期チェック: クラウド(${new Date(cloudLastUpdated).toLocaleTimeString()}) / ローカル(${new Date(localLastUpdated).toLocaleTimeString()})`);
+
+                // クラウドの方が新しければ（またはローカルにまだ設定がなければ）、自動更新
+                // 10秒程度の時計のズレは許容する
+                if (cloudLastUpdated > (localLastUpdated + 10000) || !state.settings.eventName) {
                     addLog("クラウドに新しいデータが見つかりました。自動更新します。");
 
                     // 設定はクラウドを優先
