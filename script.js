@@ -133,9 +133,9 @@ function saveData(isNotify = false, newEntry = null) {
         addLog(`保存失敗: ${e.message}`, "error");
         console.error("Save failed:", e);
         if (e.name === 'QuotaExceededError' || e.code === 22) {
-            addLog("⚠️ ストレージ容量限界！古いデータを削除してください。", "error");
+            alert("⚠️ 保存容量がいっぱいです！\n画像が大きすぎるか、データが多すぎます。古いデータを削除するか、画像を小さくしてください。");
         } else {
-            addLog(`⚠️ 保存エラー: ${e.message}`, "error");
+            alert(`⚠️ 保存エラーが発生しました: ${e.message}`);
         }
     }
     updateTodaySales();
@@ -469,15 +469,20 @@ function initApp() {
     document.getElementById('id-pull-sync').addEventListener('click', pullFromCloud);
 
     // TOP画像アップロード処理
-    document.getElementById('setting-top-img').addEventListener('change', (e) => {
+    document.getElementById('setting-top-img').addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onload = (evt) => {
-                state.settings.topImage = evt.target.result;
+            try {
+                // 画像を圧縮してから保存
+                const compressed = await compressImage(file, 800, 0.7);
+                state.settings.topImage = compressed;
                 updateSettingsUI();
-            };
-            reader.readAsDataURL(file);
+                saveData(); // 画像を選んだら即座に保存
+                alert("画像を圧縮して保存しました✨");
+            } catch (err) {
+                console.error(err);
+                alert("画像の読み込みに失敗しました。");
+            }
         }
     });
 
@@ -1788,4 +1793,40 @@ function updateSlotSummary() {
     });
 
     if (totalSumEl) totalSumEl.textContent = totalAllSlots;
+}
+
+/**
+ * 画像を指定のサイズと品質で圧縮し、DataURLとして返す
+ */
+async function compressImage(file, maxWidth = 800, quality = 0.7) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxWidth) {
+                    height = Math.round((height * maxWidth) / width);
+                    width = maxWidth;
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // JPEG形式で圧縮（品質指定）
+                const dataUrl = canvas.toDataURL('image/jpeg', quality);
+                resolve(dataUrl);
+            };
+            img.onerror = reject;
+        };
+        reader.onerror = reject;
+    });
 }
