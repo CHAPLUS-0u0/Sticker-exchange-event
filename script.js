@@ -330,44 +330,49 @@ async function silentSyncFromCloud() {
                 const cloudLastUpdated = cloudData.lastUpdated || 0;
                 const localLastUpdated = state.lastUpdated || 0;
 
-                // 1. 名簿と売上は常に統合（マージ）
-                const newEntries = mergeCollections(state.entries || [], cloudData.entries || []);
-                const newSales = mergeCollections(state.sales || [], cloudData.sales || []);
+                // 自分のPush直後などの微差(5秒)はスキップ
+                if (cloudLastUpdated <= localLastUpdated + 5000) return;
 
-                const hasChange = (newEntries.length !== (state.entries ? state.entries.length : 0)) ||
-                    (newSales.length !== (state.sales ? state.sales.length : 0));
+                // 管理者（iPad）の場合は、クラウドにあるものを「最新の正解」として取り込む
+                // これによりPCでの削除がiPadにも反映されるようになる
+                if (isAdminAuth) {
+                    state.entries = cloudData.entries || [];
+                    state.sales = mergeCollections(state.sales || [], cloudData.sales || []);
+                    state.lastUpdated = cloudLastUpdated;
+                    addLog(`[同期] クラウドから最新データを反映しました(${state.entries.length}件)`);
+                } else {
+                    // 一般ユーザー（iPhone等）の場合は、既存のマージ（統合）ロジック
+                    const newEntries = mergeCollections(state.entries || [], cloudData.entries || []);
+                    const newSales = mergeCollections(state.sales || [], cloudData.sales || []);
 
-                if (hasChange) {
-                    state.entries = newEntries;
-                    state.sales = newSales;
-                    addLog("クラウドから新しい名簿/売上データを統合しました。");
-                }
+                    const count1 = state.entries ? state.entries.length : 0;
+                    const count2 = newEntries.length;
 
-                // 2. 設定や商品は、クラウドの方が「明らかに新しい」場合のみ反映
-                if (cloudLastUpdated > (localLastUpdated + 30000)) {
-                    if (!isAdminAuth) {
-                        // 一般ユーザー画面なら自動反映
-                        state.settings = { ...state.settings, ...cloudData.settings };
-                        state.products = cloudData.products || state.products;
+                    if (count1 !== count2) {
+                        state.entries = newEntries;
+                        state.sales = newSales;
                         state.lastUpdated = cloudLastUpdated;
-                        addLog("最新のイベント設定を反映しました。");
-                    } else {
-                        // 管理者画面なら、編集中かもしれないので警告のみ
-                        addLog(`クラウドに新しい設定があります(${new Date(cloudLastUpdated).toLocaleTimeString()})。手動で「復元」して反映してください。`);
+                        addLog("[同期] 新しい登録情報を取得しました。");
                     }
                 }
 
-                if (hasChange || (!isAdminAuth && cloudLastUpdated > localLastUpdated)) {
-                    // ローカル保存のみ（pushはしない）
-                    const json = JSON.stringify(state);
-                    localStorage.setItem('sticker_exchange_data', json);
-
-                    // UI部品を個別に更新（管理者画面などでのチラつき防止）
-                    if (typeof updateReceptionList === 'function') updateReceptionList();
-                    if (typeof updateSalesHistoryUI === 'function') updateSalesHistoryUI();
-                    if (typeof populateSlotSelects === 'function') populateSlotSelects();
-                    updateSettingsUI();
+                // 設定や商品は、クラウドが5秒以上新しい場合のみ反映
+                if (cloudLastUpdated > (localLastUpdated + 5000)) {
+                    state.settings = { ...state.settings, ...cloudData.settings };
+                    state.products = cloudData.products || state.products;
+                    if (!isAdminAuth) {
+                        state.lastUpdated = cloudLastUpdated;
+                    }
                 }
+
+                // 保存
+                const json = JSON.stringify(state);
+                localStorage.setItem('sticker_exchange_data', json);
+
+                if (typeof updateReceptionList === 'function') updateReceptionList();
+                if (typeof updateSalesHistoryUI === 'function') updateSalesHistoryUI();
+                if (typeof populateSlotSelects === 'function') populateSlotSelects();
+                updateSettingsUI();
             }
         }
     } catch (e) {
@@ -743,10 +748,14 @@ function initApp() {
         });
     }
 
+    // ---- 定期実行タイマー ----
+    // 30秒に一度、クラウドの最新情報を自動チェックする
+    setInterval(silentSyncFromCloud, 30000);
+
     // バージョンラベル更新
     const versionEl = document.getElementById('app-version-display');
     if (versionEl) {
-        versionEl.textContent = `Version: 20260311-1570`;
+        versionEl.textContent = `Version: 20260311-1580`;
     }
 
     // QRコードとURLシェア機能を初期化
