@@ -361,7 +361,12 @@ async function silentSyncFromCloud() {
                     // ローカル保存のみ（pushはしない）
                     const json = JSON.stringify(state);
                     localStorage.setItem('sticker_exchange_data', json);
-                    refreshActiveView();
+
+                    // UI部品を個別に更新（管理者画面などでのチラつき防止）
+                    if (typeof updateReceptionList === 'function') updateReceptionList();
+                    if (typeof updateSalesHistoryUI === 'function') updateSalesHistoryUI();
+                    if (typeof populateSlotSelects === 'function') populateSlotSelects();
+                    updateSettingsUI();
                 }
             }
         }
@@ -741,7 +746,7 @@ function initApp() {
     // バージョンラベル更新
     const versionEl = document.getElementById('app-version-display');
     if (versionEl) {
-        versionEl.textContent = `Version: 20260311-1550`;
+        versionEl.textContent = `Version: 20260311-1560`;
     }
 
     // QRコードとURLシェア機能を初期化
@@ -982,8 +987,17 @@ function handleRegistration(e) {
     saveData(true, newEntry); // 新規予約の通知を飛ばす
     populateSlotSelects();
 
+    // 申込完了画面の表示
     document.getElementById('registration-form').classList.add('hidden');
     document.getElementById('registration-result').classList.remove('hidden');
+
+    // ユーザーに「送信完了」を強調する
+    const resTitle = document.querySelector('#registration-result h2');
+    if (resTitle) {
+        resTitle.innerHTML = "✅ 申込が完了しました！";
+        resTitle.style.color = "#4caf50";
+    }
+
     document.getElementById('res-slot-txt').textContent = newEntry.slotName;
     document.getElementById('res-number').textContent = newEntry.number;
     window.scrollTo({ top: 0, behavior: 'smooth' });
