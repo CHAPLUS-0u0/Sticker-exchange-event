@@ -206,12 +206,18 @@ async function syncToCloud(isNotify = false, newEntry = null) {
         }
 
         const payload = JSON.stringify(payloadObj);
-        console.log("Sync: Sending data to cloud. Size:", payload.length, isNotify ? "(with notification)" : "");
+
+        // GASの1セルあたりの上限（約5万文字）をチェック
+        if (payload.length > 50000) {
+            console.warn("Payload size exceeds Google Sheets cell limit.");
+            addLog("⚠️ クラウド保存容量オーバー。画像が大きすぎる可能性があります。", "error");
+        }
 
         const response = await fetch(state.settings.gasUrl, {
             method: 'POST',
-            body: payload,
-            mode: 'no-cors'
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: payload
         });
 
         addLog(`クラウドへ送信完了 ${isNotify ? "(通知リクエスト込)" : ""}`);
@@ -280,6 +286,12 @@ async function pullFromCloud() {
  */
 async function silentSyncFromCloud() {
     if (!state.settings.gasUrl) return;
+
+    // 管理者としてログイン中の場合は、自動上書きを禁止（自分の編集分が消えるのを防ぐ）
+    if (isAdminAuth) {
+        addLog("管理者モードのためサイレント同期をスキップします。");
+        return;
+    }
 
     try {
         const response = await fetch(`${state.settings.gasUrl}?action=get`);
@@ -473,8 +485,8 @@ function initApp() {
         const file = e.target.files[0];
         if (file) {
             try {
-                // 画像を圧縮してから保存
-                const compressed = await compressImage(file, 800, 0.7);
+                // 画像をさらに小さく圧縮 (600px / 品質 0.5) して保存
+                const compressed = await compressImage(file, 600, 0.5);
                 state.settings.topImage = compressed;
                 updateSettingsUI();
                 saveData(); // 画像を選んだら即座に保存
