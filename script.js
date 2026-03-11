@@ -746,7 +746,7 @@ function initApp() {
     // バージョンラベル更新
     const versionEl = document.getElementById('app-version-display');
     if (versionEl) {
-        versionEl.textContent = `Version: 20260311-1560`;
+        versionEl.textContent = `Version: 20260311-1570`;
     }
 
     // QRコードとURLシェア機能を初期化

@@ -450,14 +450,18 @@
                     <div class="card p-3 mb-4" style="background-color: #f7fcff; border: 2px solid #90caf9;">
                         <h3 style="margin-bottom: 10px;">☁️ クラウド同期</h3>
                         <p style="font-size: 0.85rem; color: #555; margin-bottom: 10px;">
-                            最新の状態をクラウドに送信します。
+                            最新の状態をクラウドに送信・取得して、複数端末で同期します。
                         </p>
-                        <button id="btn-force-sync" class="btn-primary w-100 mb-2">☁️ 今すぐクラウドへ送信（バックアップ）</button>
+                        <button id="btn-force-sync" class="btn-primary w-100 mb-2">☁️ 今すぐクラウドへ送信 (バックアップ)</button>
                         <button id="id-pull-sync" class="btn-outline w-100 mb-2"
-                            style="border-color:#90caf9; color:#1976d2;">☁️ クラウドから取得（復元）</button>
+                            style="border-color:#90caf9; color:#1976d2;">☁️ クラウドから取得 (全上書き復元)</button>
                         <div id="sync-status" style="font-size: 0.8rem; text-align: center; color: #888;">(同期状況を表示中...)
                         </div>
                     </div>
+
+                    <div id="sync-diagnostics-info"></div>
+
+                    <button id="btn-export-csv" class="btn-outline w-100 mb-4">📥 CSV出力 (予約名簿)</button>
 
                     <div class="card p-3 mb-4" style="background-color: #fff8e1; border: 2px solid #ffcc80;">
                         <h3 style="margin-bottom: 10px;">📦 ストレージ使用量</h3>
@@ -469,51 +473,50 @@
                         </div>
                         <p id="storage-usage-text" style="font-size: 0.85rem; color: #666; margin-bottom: 0;">使用量: 0KB /
                             5000KB (0%)</p>
-                        <p style="font-size: 0.75rem; color: #888; margin-top: 5px;">※ブラウザの制限(5MB)を超えると保存できなくなります。</p>
-                    </div>
-
-                    <div class="card p-3 mb-4" style="background-color: #f5f5f5; border: 2px solid #ddd;">
-                        <h3 style="margin-bottom: 10px;">🔍 診断用ログ</h3>
-                        <div id="debug-log-area"
-                            style="font-family: monospace; font-size: 0.75rem; background: #333; color: #0f0; padding: 10px; border-radius: 5px; height: 120px; overflow-y: auto; white-space: pre-wrap; margin-bottom: 10px;">
-                        </div>
-                        <button id="btn-copy-debug-log" class="btn-outline w-100"
-                            style="font-size: 0.8rem;">ログをコピーする</button>
-                    </div>
-
-                    <button id="btn-export-csv" class="btn-outline w-100 mb-4">📥 CSV出力 (予約名簿)</button>
-
-                    <div class="form-group mb-4">
-                        <label>バックアップ (全データ出力)</label>
-                        <button id="btn-export-backup" class="btn-primary w-100 mb-2"
-                            style="background-color: var(--primary-blue);">📤 全データを保存する (.json)</button>
-                        <label class="btn-outline w-100"
-                            style="display: block; text-align: center; cursor: pointer; margin-bottom: 0;">
-                            📥 保存したデータを読み込む (復元)
-                            <input type="file" id="input-import-backup" accept=".json" style="display: none;">
-                        </label>
                     </div>
 
                     <hr class="mb-4">
-
-                    <h3 style="margin-bottom: 1rem;">🧪 テスト・開発用機能</h3>
-                    <button id="btn-generate-test-products" class="btn-secondary w-100 mb-2">テスト用商品を登録する</button>
-                    <button id="btn-generate-test" class="btn-secondary w-100 mb-4">テスト用名簿データを10名分ずつ生成</button>
-
-                    <hr class="mb-4">
-                    <div id="sync-diagnostics-info"></div>
 
                     <h3 style="margin-bottom: 1rem;">✨ アプリ更新</h3>
                     <button id="btn-force-reload" class="btn-outline w-100 mb-4"
                         style="background: #e3f2fd; border-color: #90caf9;">アプリを最新版に更新 (強制リロード)</button>
 
-                    <h3 style="margin-bottom: 1rem; color: #f44336;">⚠️ 危険な操作</h3>
+                    <h3 style="margin-bottom: 1rem; color: #f44336;">⚠️ メンテナンス</h3>
                     <button id="btn-clear-old-sales" class="btn-outline w-100 mb-3"
-                        style="border-color: #ff8a80; color: #ff8a80;">古い売上履歴を削除する (容量確保)</button>
-                    <button id="btn-clear-all" class="btn-danger w-100">名簿と売上データをリセットする</button>
-                    <p style="font-size: 0.8rem; color: #888; margin-top: 10px;">
-                        ※本番前やイベント終了後にデータを空にする際に使用します。商品情報は消えません。
-                    </p>
+                        style="border-color: #ff8a80; color: #ff8a80;">古い売上履歴を削除する (量確保)</button>
+                    <button id="btn-clear-all" class="btn-danger w-100 mb-2">名簿と売上データをリセットする</button>
+                    <p style="font-size: 0.8rem; color: #888; margin-bottom: 1.5rem;">※本番前や終了後に。商品情報は消えません。</p>
+
+                    <details style="background: #fdfdfd; border: 1px solid #eee; border-radius: 10px; padding: 10px;">
+                        <summary style="font-size: 0.9rem; color: #888; cursor: pointer;">🛠️ 高度な設定・緊急用ツール (通常は使いません)
+                        </summary>
+                        <div style="margin-top: 15px;">
+                            <p style="font-size: 0.8rem; color: #666; margin-bottom: 10px;">障害発生時やバックアップ用のツールです。</p>
+
+                            <h4 style="font-size: 0.9rem; margin-bottom: 5px;">🔍 診断用ログ</h4>
+                            <div id="debug-log-area"
+                                style="font-family: monospace; font-size: 0.75rem; background: #333; color: #0f0; padding: 10px; border-radius: 5px; height: 100px; overflow-y: auto; white-space: pre-wrap; margin-bottom: 10px;">
+                            </div>
+                            <button id="btn-copy-debug-log" class="btn-outline w-100 mb-4"
+                                style="font-size: 0.8rem;">ログをコピー</button>
+
+                            <h4 style="font-size: 0.9rem; margin-bottom: 5px;">💾 ローカルバックアップ</h4>
+                            <button id="btn-export-backup" class="btn-outline w-100 mb-2" style="font-size: 0.8rem;">📤
+                                全データをファイル保存 (.json)</button>
+                            <label class="btn-outline w-100"
+                                style="display: block; text-align: center; cursor: pointer; font-size: 0.8rem;">
+                                📥 ファイルから復元
+                                <input type="file" id="input-import-backup" accept=".json" style="display: none;">
+                            </label>
+
+                            <hr style="margin: 15px 0; border: none; border-top: 1px dashed #eee;">
+                            <h4 style="font-size: 0.9rem; margin-bottom: 5px;">🧪 テストデータ</h4>
+                            <button id="btn-generate-test-products" class="btn-secondary w-100 mb-2"
+                                style="font-size: 0.8rem;">テスト商品を登録</button>
+                            <button id="btn-generate-test" class="btn-secondary w-100"
+                                style="font-size: 0.8rem;">テスト名簿を生成</button>
+                        </div>
+                    </details>
                 </div>
         </section>
     </main>
@@ -525,7 +528,7 @@
     </footer>
 
     <!-- QRコード生成ライブラリ (QRCode.js) -->
-    <script src="script.js?v=20260311-1560"></script>
+    <script src="script.js?v=20260311-1570"></script>
 </body>
 
 </html>
