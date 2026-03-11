@@ -204,10 +204,21 @@ async function syncToCloud(isNotify = false, newEntry = null) {
 
     updateSyncStatus('syncing');
     try {
-        const payloadObj = { ...state };
-        if (isNotify && newEntry) {
-            payloadObj.isNotify = true;
-            payloadObj.newEntry = newEntry;
+        let payloadObj;
+        if (isNotify && newEntry && !isAdminAuth) {
+            // お客様側の登録時は、全体の上書きを防ぐため「新規データのみ」を送信
+            payloadObj = {
+                isNotify: true,
+                newEntry: newEntry,
+                lastUpdated: Date.now()
+            };
+        } else {
+            // 管理者モードや通常の保存時は、全データを送信
+            payloadObj = { ...state };
+            if (isNotify && newEntry) {
+                payloadObj.isNotify = true;
+                payloadObj.newEntry = newEntry;
+            }
         }
 
         const fullJson = JSON.stringify(payloadObj);
@@ -222,7 +233,11 @@ async function syncToCloud(isNotify = false, newEntry = null) {
 
         addLog(`クラウド送信準備: ${fullJson.length}文字 (${chunks.length}分割)`);
 
-        const payload = JSON.stringify({ chunks: chunks });
+        const payload = JSON.stringify({
+            chunks: chunks,
+            isNotify: !!isNotify,
+            newEntry: newEntry
+        });
 
         const response = await fetch(state.settings.gasUrl, {
             method: 'POST',
@@ -305,45 +320,48 @@ async function pullFromCloud() {
 async function silentSyncFromCloud() {
     if (!state.settings.gasUrl) return;
 
-    // 管理者としてログイン中の場合は、自動上書きを禁止（自分の編集分が消えるのを防ぐ）
-    if (isAdminAuth) {
-        addLog("管理者モードのためサイレント同期をスキップします。");
-        return;
-    }
-
     try {
-        const response = await fetch(`${state.settings.gasUrl}?action=get`);
+        const cacheBuster = `&t=${Date.now()}`;
+        const response = await fetch(`${state.settings.gasUrl}?action=get${cacheBuster}`);
         if (response.ok) {
-            const cloudData = await response.json();
+            const rawData = await response.text();
+            const cloudData = JSON.parse(rawData);
             if (cloudData && typeof cloudData === 'object') {
                 const cloudLastUpdated = cloudData.lastUpdated || 0;
                 const localLastUpdated = state.lastUpdated || 0;
 
-                addLog(`同期チェック: クラウド(${new Date(cloudLastUpdated).toLocaleTimeString()}) / ローカル(${new Date(localLastUpdated).toLocaleTimeString()})`);
+                // 1. 名簿と売上は常に統合（マージ）
+                const newEntries = mergeCollections(state.entries || [], cloudData.entries || []);
+                const newSales = mergeCollections(state.sales || [], cloudData.sales || []);
 
-                // クラウドの方が新しければ（またはローカルにまだ設定がなければ）、自動更新
-                // 10秒程度の時計のズレは許容する
-                if (cloudLastUpdated > (localLastUpdated + 10000) || !state.settings.eventName) {
-                    addLog("クラウドに新しいデータが見つかりました。自動更新します。");
+                const hasChange = (newEntries.length !== (state.entries ? state.entries.length : 0)) ||
+                    (newSales.length !== (state.sales ? state.sales.length : 0));
 
-                    // 設定はクラウドを優先
-                    state.settings = { ...state.settings, ...cloudData.settings };
-                    state.slotCounts = cloudData.slotCounts || state.slotCounts;
+                if (hasChange) {
+                    state.entries = newEntries;
+                    state.sales = newSales;
+                    addLog("クラウドから新しい名簿/売上データを統合しました。");
+                }
 
-                    // 名簿・売上・商品はマージ（既存のロジックを流用）
-                    state.entries = mergeCollections(state.entries || [], cloudData.entries || []);
-                    state.sales = mergeCollections(state.sales || [], cloudData.sales || []);
-                    state.products = mergeCollections(state.products || [], cloudData.products || []);
+                // 2. 設定や商品は、クラウドの方が「明らかに新しい」場合のみ反映
+                if (cloudLastUpdated > (localLastUpdated + 30000)) {
+                    if (!isAdminAuth) {
+                        // 一般ユーザー画面なら自動反映
+                        state.settings = { ...state.settings, ...cloudData.settings };
+                        state.products = cloudData.products || state.products;
+                        state.lastUpdated = cloudLastUpdated;
+                        addLog("最新のイベント設定を反映しました。");
+                    } else {
+                        // 管理者画面なら、編集中かもしれないので警告のみ
+                        addLog(`クラウドに新しい設定があります(${new Date(cloudLastUpdated).toLocaleTimeString()})。手動で「復元」して反映してください。`);
+                    }
+                }
 
-                    state.lastUpdated = cloudLastUpdated;
-
-                    // ローカルストレージに保存し、UIを更新
+                if (hasChange || (!isAdminAuth && cloudLastUpdated > localLastUpdated)) {
+                    // ローカル保存のみ（pushはしない）
                     const json = JSON.stringify(state);
                     localStorage.setItem('sticker_exchange_data', json);
-
                     refreshActiveView();
-                    updateSettingsUI();
-                    addLog("自動更新が完了しました。");
                 }
             }
         }
@@ -723,7 +741,7 @@ function initApp() {
     // バージョンラベル更新
     const versionEl = document.getElementById('app-version-display');
     if (versionEl) {
-        versionEl.textContent = `Version: 20260311-1540`;
+        versionEl.textContent = `Version: 20260311-1550`;
     }
 
     // QRコードとURLシェア機能を初期化
