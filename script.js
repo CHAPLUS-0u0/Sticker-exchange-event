@@ -261,7 +261,9 @@ async function pullFromCloud() {
     if (!confirm("クラウドからデータを取得して『完全上書き』しますか？\n\nPC側のデータをiPhoneにコピーする場合に使用します。iPhone側にしかないデータ（名簿や売上）は上書きされて消えます。")) return;
 
     try {
-        const response = await fetch(`${state.settings.gasUrl}?action=get`);
+        // キャッシュ回避
+        const cacheBuster = `&t=${Date.now()}`;
+        const response = await fetch(`${state.settings.gasUrl}?action=get${cacheBuster}`);
         if (response.ok) {
             const rawData = await response.text();
             // 分割されたデータがマージされた状態で届くので、そのまま解析
