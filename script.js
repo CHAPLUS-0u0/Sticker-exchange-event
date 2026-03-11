@@ -144,6 +144,7 @@ async function saveData(isNotify = false, newEntry = null) {
     }
     updateTodaySales();
     updateStorageUsage();
+    updateSyncDiagnostics(); // 統計情報を更新
     return await syncToCloud(isNotify, newEntry);
 }
 
@@ -257,7 +258,7 @@ async function pullFromCloud() {
         alert("GAS URLが設定されていません。");
         return;
     }
-    if (!confirm("クラウドからデータを取得して復元しますか？\n現在の名簿や売上データが、クラウドの内容とマージ（統合）されます。")) return;
+    if (!confirm("クラウドからデータを取得して『完全上書き』しますか？\n\nPC側のデータをiPhoneにコピーする場合に使用します。iPhone側にしかないデータ（名簿や売上）は上書きされて消えます。")) return;
 
     try {
         const response = await fetch(`${state.settings.gasUrl}?action=get`);
@@ -345,6 +346,32 @@ async function silentSyncFromCloud() {
     } catch (e) {
         console.warn("Silent sync failed:", e);
     }
+    updateSyncDiagnostics(); // 統計情報を更新
+}
+
+/**
+ * 現在の保持データ件数などをUIに表示し、同期し忘れを防ぐ
+ */
+function updateSyncDiagnostics() {
+    const el = document.getElementById('sync-diagnostics-info');
+    if (!el) return;
+
+    const entryCount = state.entries ? state.entries.length : 0;
+    const saleCount = state.sales ? state.sales.length : 0;
+    const productCount = state.products ? state.products.length : 0;
+    const lastTime = state.lastUpdated ? new Date(state.lastUpdated).toLocaleTimeString() : "なし";
+
+    el.innerHTML = `
+        <div style="background: #f5f5f5; padding: 10px; border-radius: 8px; border-left: 4px solid var(--primary-purple); margin-bottom: 20px;">
+            <p style="font-size: 0.85rem; margin-bottom: 5px;"><strong>📊 現在の端末内データ状況:</strong></p>
+            <ul style="font-size: 0.8rem; list-style: none; padding-left: 0;">
+                <li>・名簿登録: <strong>${entryCount} 名</strong></li>
+                <li>・売上件数: <strong>${saleCount} 件</strong></li>
+                <li>・登録商品: <strong>${productCount} 点</strong></li>
+                <li style="margin-top: 5px; color: #666;">・最終更新: ${lastTime}</li>
+            </ul>
+        </div>
+    `;
 }
 
 function mergeCollections(local, cloud) {
@@ -677,7 +704,7 @@ function initApp() {
     // バージョンラベル更新
     const versionEl = document.getElementById('app-version-display');
     if (versionEl) {
-        versionEl.textContent = `Version: 20260311-1510`;
+        versionEl.textContent = `Version: 20260311-1520`;
     }
 
     // QRコードとURLシェア機能を初期化
