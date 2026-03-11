@@ -123,7 +123,7 @@ async function loadData() {
 
 // データ同期機能は「データ管理」タブのボタンから手動で行う形式に整理しました
 
-function saveData(isNotify = false, newEntry = null) {
+async function saveData(isNotify = false, newEntry = null) {
     state.lastUpdated = Date.now();
     try {
         const json = JSON.stringify(state);
@@ -140,7 +140,7 @@ function saveData(isNotify = false, newEntry = null) {
     }
     updateTodaySales();
     updateStorageUsage();
-    syncToCloud(isNotify, newEntry);
+    return await syncToCloud(isNotify, newEntry);
 }
 
 /**
@@ -194,7 +194,7 @@ function updateSyncStatus(status) {
 async function syncToCloud(isNotify = false, newEntry = null) {
     if (!state.settings.gasUrl) {
         console.warn("Sync: No GAS URL configured.");
-        return;
+        return false;
     }
 
     updateSyncStatus('syncing');
@@ -211,12 +211,14 @@ async function syncToCloud(isNotify = false, newEntry = null) {
         if (payload.length > 50000) {
             console.warn("Payload size exceeds Google Sheets cell limit.");
             addLog("⚠️ クラウド保存容量オーバー。画像が大きすぎる可能性があります。", "error");
-            alert("⚠️ クラウドへの保存容量を超えています！\n画像が大きすぎるか、データが多すぎます。画像をさらに小さくするか、商品を減らして試してください。");
+            alert(`⚠️ クラウドへの保存容量を超えています！\n(現在: ${payload.length}文字 / 上限: 50000文字)\n画像が大きすぎるか、データが多すぎます。画像を削除するか、さらに小さくして試してください。`);
             updateSyncStatus('error');
-            return; // 送信自体を中止
+            return false;
         }
 
         const response = await fetch(state.settings.gasUrl, {
+            // no-cors mode returns an opaque response, which always looks like success in catch blocks,
+            // but we can at least return true if fetch doesn't throw.
             method: 'POST',
             mode: 'no-cors',
             headers: { 'Content-Type': 'application/json' },
@@ -225,19 +227,24 @@ async function syncToCloud(isNotify = false, newEntry = null) {
 
         addLog(`クラウドへ送信完了 ${isNotify ? "(通知リクエスト込)" : ""}`);
         updateSyncStatus('success');
+        return true;
     } catch (e) {
         addLog(`⚠️ クラウド送信失敗: ${e.message}`, "error");
         console.error("Sync: Cloud push failed:", e);
         updateSyncStatus('error');
+        return false;
     }
 }
 
 async function forceSyncToCloud() {
-    if (!confirm("現在のiPadのデータをクラウド(スプレッドシート)に送信します。よろしいですか？\n※他の端末で入力したデータよりこちらが優先されます。")) return;
+    if (!confirm("現在のデータをクラウドにバックアップとして送信（上書き更新）します。よろしいですか？")) return;
 
-    state.lastUpdated = Date.now(); // タイムスタンプを強制更新
-    saveData();
-    alert("クラウドへデータを送信（バックアップ）しました✨");
+    state.lastUpdated = Date.now();
+    const success = await saveData();
+    if (success) {
+        alert("クラウドへデータを送信（バックアップ）しました✨");
+    }
+    // 失敗時は saveData や syncToCloud 内でアラートが出るのでここでは何もしない
 }
 
 async function pullFromCloud() {
@@ -492,7 +499,7 @@ function initApp() {
         if (file) {
             try {
                 // 画像をさらに小さく圧縮 (600px / 品質 0.5) して保存
-                const compressed = await compressImage(file, 600, 0.5);
+                const compressed = await compressImageFile(file, 400, 0.4);
                 state.settings.topImage = compressed;
                 updateSettingsUI();
                 saveData(); // 画像を選んだら即座に保存
@@ -667,7 +674,7 @@ function initApp() {
     // バージョンラベル更新
     const versionEl = document.getElementById('app-version-display');
     if (versionEl) {
-        versionEl.textContent = `Version: 20260311-1410`;
+        versionEl.textContent = `Version: 20260311-1430`;
     }
 
     // QRコードとURLシェア機能を初期化
@@ -930,8 +937,8 @@ function initProductAdmin() {
             const reader = new FileReader();
             reader.onload = async function (event) {
                 const rawBase64 = event.target.result;
-                // 画像を圧縮してから保存
-                pendingImageBase64 = await compressImage(rawBase64);
+                // 画像を圧縮してから保存 (400px / 0.4品質でクラウド制限内に収める)
+                pendingImageBase64 = await compressImageBase64(rawBase64, 400, 0.4);
                 imgPreview.src = pendingImageBase64;
                 imgPreview.style.display = 'block';
             };
@@ -1208,7 +1215,7 @@ function updateSalesHistoryUI() {
     });
 }
 
-function compressImage(base64Str, maxWidth = 320, quality = 0.6) {
+function compressImageBase64(base64Str, maxWidth = 400, quality = 0.4) {
     return new Promise((resolve) => {
         const img = new Image();
         img.src = base64Str;
@@ -1216,17 +1223,14 @@ function compressImage(base64Str, maxWidth = 320, quality = 0.6) {
             const canvas = document.createElement('canvas');
             let width = img.width;
             let height = img.height;
-
             if (width > maxWidth) {
                 height *= maxWidth / width;
                 width = maxWidth;
             }
-
             canvas.width = width;
             canvas.height = height;
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
-            // 本番用にさらに圧縮率を高める
             resolve(canvas.toDataURL('image/jpeg', quality));
         };
         img.onerror = () => resolve(base64Str); // 失敗時は元のまま
@@ -1830,9 +1834,9 @@ function updateSlotSummary() {
 }
 
 /**
- * 画像を指定のサイズと品質で圧縮し、DataURLとして返す
+ * Fileオブジェクトを指定のサイズと品質で圧縮し、DataURLとして返す
  */
-async function compressImage(file, maxWidth = 800, quality = 0.7) {
+async function compressImageFile(file, maxWidth = 400, quality = 0.4) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.readAsDataURL(file);
