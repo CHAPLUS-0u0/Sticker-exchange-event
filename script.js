@@ -676,6 +676,21 @@ function initApp() {
         }
     });
 
+    const btnClearAll = document.getElementById('btn-clear-all');
+    if (btnClearAll) {
+        btnClearAll.addEventListener('click', () => {
+            if (confirm("【⚠️重要】名簿データと売上データを端末から完全に消去します。よろしいですか？\n(商品は消えません。PCのクラウド同期には影響しません)")) {
+                state.entries = [];
+                state.sales = [];
+                state.lastUpdated = Date.now();
+                saveData();
+                addLog("端末データをリセットしました。");
+                alert("✅ データをリセットしました。");
+                location.reload();
+            }
+        });
+    }
+
     // ---- 診断ログ機能 ----
     const btnCopyLog = document.getElementById('btn-copy-debug-log');
     if (btnCopyLog) {
@@ -704,7 +719,7 @@ function initApp() {
     // バージョンラベル更新
     const versionEl = document.getElementById('app-version-display');
     if (versionEl) {
-        versionEl.textContent = `Version: 20260311-1520`;
+        versionEl.textContent = `Version: 20260311-1530`;
     }
 
     // QRコードとURLシェア機能を初期化
