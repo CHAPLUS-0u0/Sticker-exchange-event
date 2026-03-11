@@ -109,6 +109,10 @@ async function loadData() {
             addLog("ローカルデータの解析に失敗しました。", "error");
         }
     }
+    // URLの強制復旧（空欄になってしまった環境への対策）
+    if (!state.settings.gasUrl || state.settings.gasUrl === "") {
+        state.settings.gasUrl = "https://script.google.com/macros/s/AKfycbxKqkvvSDLWc2M6NkxzyMJ9_8DWPspAfQWUB6fOi6gVRDRmgvW50V9jzrX1uNWDTa9k/exec";
+    }
     if (!Array.isArray(state.entries)) state.entries = [];
     if (!Array.isArray(state.products)) state.products = [];
     if (!Array.isArray(state.sales)) state.sales = [];
@@ -677,7 +681,7 @@ function initApp() {
     // バージョンラベル更新
     const versionEl = document.getElementById('app-version-display');
     if (versionEl) {
-        versionEl.textContent = `Version: 20260311-1445`;
+        versionEl.textContent = `Version: 20260311-1500`;
     }
 
     // QRコードとURLシェア機能を初期化
