@@ -648,6 +648,22 @@ function initApp() {
     addLog("アプリを起動しました");
     updateStorageUsage();
 
+    // ---- 強制更新ボタン ----
+    if (document.getElementById('btn-force-reload')) {
+        document.getElementById('btn-force-reload').addEventListener('click', () => {
+            if (confirm("最新の修正プログラムを読み込みますか？（設定データは消えません）")) {
+                const newUrl = window.location.origin + window.location.pathname + '?v=' + Date.now() + window.location.hash;
+                window.location.replace(newUrl);
+            }
+        });
+    }
+
+    // バージョンラベル更新
+    const versionEl = document.getElementById('app-version-display');
+    if (versionEl) {
+        versionEl.textContent = `Version: 20260311-1340`;
+    }
+
     // QRコードとURLシェア機能を初期化
     try {
         initShortUrlFeatures();
