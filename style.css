@@ -117,6 +117,22 @@ body {
     margin-top: 20px;
 }
 
+#top-event-title {
+    font-size: clamp(0.8rem, 4.5vw, 2.2rem);
+    /* 文字をより小さく、1行に収まるように */
+    line-height: 1.4;
+    color: #ff6090;
+    text-shadow: 1px 1px 2px rgba(255, 128, 171, 0.2);
+    font-weight: 800;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    /* 万が一入り切らない場合は...にする */
+    display: block;
+    margin: 5px auto 15px auto;
+    max-width: 100%;
+}
+
 .card-header h2 {
     color: #ff80ab;
     text-align: center;

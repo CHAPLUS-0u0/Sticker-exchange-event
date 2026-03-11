@@ -50,7 +50,7 @@
         <!-- Top View (一般向けトップページ) -->
         <section id="top-view" class="view">
             <div class="card" style="text-align: center; max-width: 600px; margin: 0 auto; padding: 2rem;">
-                <h1 style="color: var(--primary-pink); margin-bottom: 1rem;" id="top-event-title">🎀 イベント名 🎀</h1>
+                <h1 id="top-event-title">🎀 イベント名 🎀</h1>
                 <p style="font-size: 1.1rem; color: #555; margin-bottom: 1.5rem;" id="top-event-date">📅 開催日: ---</p>
 
                 <img id="top-view-image" src="" alt="イベント画像"
@@ -212,6 +212,8 @@
                     <div id="form-notice-area"
                         style="font-size: 0.9rem; color: #555; background: #fffcf0; padding: 10px; border-radius: 10px; border: 1px solid #ffd54f; margin-bottom: 1rem; text-align: left; white-space: pre-wrap; display: none;">
                     </div>
+                    <button class="btn-outline btn-back-to-top"
+                        style="margin-bottom: 1rem; padding: 8px 15px; font-size: 0.9rem;">← トップへ戻る</button>
                 </div>
                 <form id="registration-form">
                     <div class="form-group">
@@ -247,7 +249,10 @@
                     <div id="completion-notice-area"
                         style="font-size: 0.9rem; color: #555; background: #f0f4ff; padding: 10px; border-radius: 10px; border: 1px solid #90caf9; margin-bottom: 1rem; text-align: left; white-space: pre-wrap; display: none;">
                     </div>
-                    <button id="btn-reset-form" class="btn-secondary w-100">戻る</button>
+                    <div style="display: flex; gap: 10px;">
+                        <button id="btn-reset-form" class="btn-outline w-100">続けて入力する</button>
+                        <button class="btn-primary w-100 btn-back-to-top">トップへ戻る</button>
+                    </div>
                 </div>
             </div>
         </section>
@@ -509,7 +514,6 @@
     </footer>
 
     <!-- QRコード生成ライブラリ (QRCode.js) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="script.js?v=20260307-1930"></script>
 </body>
 

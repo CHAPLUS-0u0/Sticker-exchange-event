@@ -59,7 +59,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 2. アクセス判定と画面表示（この時点でデータがstateに入っている）
     checkAccess();
 
-    // 3. イベントリスナーなどの初期化
+    // 3. サイレント同期（裏側で最新情報を取得）
+    silentSyncFromCloud();
+
+    // 4. イベントリスナーなどの初期化
     initApp();
 
     // 4. 最終的な表示更新
@@ -120,7 +123,7 @@ async function loadData() {
 
 // データ同期機能は「データ管理」タブのボタンから手動で行う形式に整理しました
 
-function saveData() {
+function saveData(isNotify = false, newEntry = null) {
     state.lastUpdated = Date.now();
     try {
         const json = JSON.stringify(state);
@@ -130,16 +133,14 @@ function saveData() {
         addLog(`保存失敗: ${e.message}`, "error");
         console.error("Save failed:", e);
         if (e.name === 'QuotaExceededError' || e.code === 22) {
-            // alertを毎回出すと邪魔なので、ログ記録のみに留める（UIのバーで警告を表示中）
             addLog("⚠️ ストレージ容量限界！古いデータを削除してください。", "error");
         } else {
-            // それ以外の致命的エラーは一回は知らせる
             addLog(`⚠️ 保存エラー: ${e.message}`, "error");
         }
     }
     updateTodaySales();
     updateStorageUsage();
-    syncToCloud();
+    syncToCloud(isNotify, newEntry);
 }
 
 /**
@@ -147,6 +148,7 @@ function saveData() {
  */
 function updateStorageUsage() {
     try {
+        // localStorageから読み直さず、現在のstateから計算
         const json = JSON.stringify(state);
         const sizeInBytes = new Blob([json]).size;
         const sizeInKb = Math.round(sizeInBytes / 1024);
@@ -189,7 +191,7 @@ function updateSyncStatus(status) {
     el.textContent += usageText;
 }
 
-async function syncToCloud() {
+async function syncToCloud(isNotify = false, newEntry = null) {
     if (!state.settings.gasUrl) {
         console.warn("Sync: No GAS URL configured.");
         return;
@@ -197,8 +199,14 @@ async function syncToCloud() {
 
     updateSyncStatus('syncing');
     try {
-        const payload = JSON.stringify(state);
-        console.log("Sync: Sending data to cloud. Size:", payload.length);
+        const payloadObj = { ...state };
+        if (isNotify && newEntry) {
+            payloadObj.isNotify = true;
+            payloadObj.newEntry = newEntry;
+        }
+
+        const payload = JSON.stringify(payloadObj);
+        console.log("Sync: Sending data to cloud. Size:", payload.length, isNotify ? "(with notification)" : "");
 
         const response = await fetch(state.settings.gasUrl, {
             method: 'POST',
@@ -206,7 +214,7 @@ async function syncToCloud() {
             mode: 'no-cors'
         });
 
-        addLog(`クラウドへ送信完了 (${payload.length} bytes)`);
+        addLog(`クラウドへ送信完了 ${isNotify ? "(通知リクエスト込)" : ""}`);
         updateSyncStatus('success');
     } catch (e) {
         addLog(`⚠️ クラウド送信失敗: ${e.message}`, "error");
@@ -258,14 +266,57 @@ async function pullFromCloud() {
                 alert("❌ クラウドデータの形式が正しくありません。");
             }
         } else {
-            addLog(`クラウド取得失敗: ${response.status}`, "error");
-            alert("❌ クラウドからデータを取得できませんでした。");
+            addLog(`クラウドからデータを取得できませんでした。ステータス: ${response.status}`, "error");
         }
     } catch (e) {
         addLog(`通信エラー: ${e.message}`, "error");
-        alert("❌ 通信エラーが発生しました。");
     }
     updateSyncStatus('success');
+}
+
+/**
+ * サイレント同期: ユーザーの操作を邪魔せずに裏側でクラウドの最新設定を確認・反映する
+ * 主に一般ユーザー向けのお知らせ更新などのために使用
+ */
+async function silentSyncFromCloud() {
+    if (!state.settings.gasUrl) return;
+
+    try {
+        const response = await fetch(`${state.settings.gasUrl}?action=get`);
+        if (response.ok) {
+            const cloudData = await response.json();
+            if (cloudData && typeof cloudData === 'object') {
+                const cloudLastUpdated = cloudData.lastUpdated || 0;
+                const localLastUpdated = state.lastUpdated || 0;
+
+                // クラウドの方が新しければ、設定と商品をマージ（予約・売上はローカル優先orマージ）
+                if (cloudLastUpdated > localLastUpdated) {
+                    addLog("クラウドに新しいデータが見つかりました。自動更新します。");
+
+                    // 設定はクラウドを優先
+                    state.settings = { ...state.settings, ...cloudData.settings };
+                    state.slotCounts = cloudData.slotCounts || state.slotCounts;
+
+                    // 名簿・売上・商品はマージ（既存のロジックを流用）
+                    state.entries = mergeCollections(state.entries || [], cloudData.entries || []);
+                    state.sales = mergeCollections(state.sales || [], cloudData.sales || []);
+                    state.products = mergeCollections(state.products || [], cloudData.products || []);
+
+                    state.lastUpdated = cloudLastUpdated;
+
+                    // ローカルストレージに保存し、UIを更新
+                    const json = JSON.stringify(state);
+                    localStorage.setItem('sticker_exchange_data', json);
+
+                    refreshActiveView();
+                    updateSettingsUI();
+                    addLog("自動更新が完了しました。");
+                }
+            }
+        }
+    } catch (e) {
+        console.warn("Silent sync failed:", e);
+    }
 }
 
 function mergeCollections(local, cloud) {
@@ -514,6 +565,16 @@ function initApp() {
         document.getElementById('registration-result').classList.add('hidden');
         document.getElementById('registration-form').classList.remove('hidden');
         regForm.reset();
+        window.scrollTo(0, 0);
+    });
+
+    // 「トップへ戻る」ボタン全てのイベント
+    document.querySelectorAll('.btn-back-to-top').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.getElementById('registration-result').classList.add('hidden');
+            document.getElementById('registration-form').classList.remove('hidden');
+            switchView(null, 'top-view');
+        });
     });
 
     // ---- 受付（名簿）タブ ----
@@ -805,7 +866,7 @@ function handleRegistration(e) {
     };
 
     state.entries.push(newEntry);
-    saveData();
+    saveData(true, newEntry); // 新規予約の通知を飛ばす
     populateSlotSelects();
 
     document.getElementById('registration-form').classList.add('hidden');
@@ -1388,7 +1449,7 @@ function generateTestData() {
                     name: randomName + " (テスト)",
                     phone: `090-${Math.floor(1000 + Math.random() * 9000)}-${Math.floor(1000 + Math.random() * 9000)}`,
                     number: displayNum,
-                    status: Math.random() > 0.7 ? 'checked-in' : 'pending', // 30%の確率で受付済
+                    status: 'pending', // テストデータは常に未受付で生成
                     timestamp: new Date().toLocaleString()
                 };
 
@@ -1588,11 +1649,6 @@ function deleteEntry(id) {
     if (confirm("本当にこの予約をキャンセル（名簿から削除）しますか？")) {
         const idx = state.entries.findIndex(e => e.id === id);
         if (idx !== -1) {
-            const entry = state.entries[idx];
-            // 受付済みの場合はカウントを減らす
-            if (entry.status === 'checked-in' && state.slotCounts[entry.slotId] > 0) {
-                state.slotCounts[entry.slotId]--;
-            }
             state.entries.splice(idx, 1);
             saveData();
             updateReceptionList();
