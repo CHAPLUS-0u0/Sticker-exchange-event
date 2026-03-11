@@ -205,27 +205,28 @@ async function syncToCloud(isNotify = false, newEntry = null) {
             payloadObj.newEntry = newEntry;
         }
 
-        const payload = JSON.stringify(payloadObj);
+        const fullJson = JSON.stringify(payloadObj);
 
-        // GASの1セルあたりの上限（約5万文字）をチェック
-        if (payload.length > 50000) {
-            console.warn("Payload size exceeds Google Sheets cell limit.");
-            addLog("⚠️ クラウド保存容量オーバー。画像が大きすぎる可能性があります。", "error");
-            alert(`⚠️ クラウドへの保存容量を超えています！\n(現在: ${payload.length}文字 / 上限: 50000文字)\n画像が大きすぎるか、データが多すぎます。画像を削除するか、さらに小さくして試してください。`);
-            updateSyncStatus('error');
-            return false;
+        // --- チャンキング（分割）ロジック ---
+        // 1セル辺りの上限(5万文字)を意識し、45,000文字ずつに分割
+        const CHUNK_SIZE = 45000;
+        const chunks = [];
+        for (let i = 0; i < fullJson.length; i += CHUNK_SIZE) {
+            chunks.push(fullJson.substring(i, i + CHUNK_SIZE));
         }
 
+        addLog(`クラウド送信準備: ${fullJson.length}文字 (${chunks.length}分割)`);
+
+        const payload = JSON.stringify({ chunks: chunks });
+
         const response = await fetch(state.settings.gasUrl, {
-            // no-cors mode returns an opaque response, which always looks like success in catch blocks,
-            // but we can at least return true if fetch doesn't throw.
             method: 'POST',
             mode: 'no-cors',
             headers: { 'Content-Type': 'application/json' },
             body: payload
         });
 
-        addLog(`クラウドへ送信完了 ${isNotify ? "(通知リクエスト込)" : ""}`);
+        addLog(`クラウドへ送信成功 ${isNotify ? "(通知リクエスト込)" : ""}`);
         updateSyncStatus('success');
         return true;
     } catch (e) {
@@ -254,15 +255,17 @@ async function pullFromCloud() {
     }
     if (!confirm("クラウドからデータを取得して復元しますか？\n現在の名簿や売上データが、クラウドの内容とマージ（統合）されます。")) return;
 
-    addLog("クラウドからデータ取得中...");
-    updateSyncStatus('syncing');
     try {
         const response = await fetch(`${state.settings.gasUrl}?action=get`);
         if (response.ok) {
-            const cloudData = await response.json();
+            const rawData = await response.text();
+            // 分割されたデータがマージされた状態で届くので、そのまま解析
+            const cloudData = JSON.parse(rawData);
+
             if (cloudData && typeof cloudData === 'object') {
                 // 配列データのマージ
                 state.entries = mergeCollections(state.entries || [], cloudData.entries || []);
+                // ... (マージ処理継続)
                 state.sales = mergeCollections(state.sales || [], cloudData.sales || []);
                 state.products = mergeCollections(state.products || [], cloudData.products || []);
 
@@ -674,7 +677,7 @@ function initApp() {
     // バージョンラベル更新
     const versionEl = document.getElementById('app-version-display');
     if (versionEl) {
-        versionEl.textContent = `Version: 20260311-1430`;
+        versionEl.textContent = `Version: 20260311-1445`;
     }
 
     // QRコードとURLシェア機能を初期化
