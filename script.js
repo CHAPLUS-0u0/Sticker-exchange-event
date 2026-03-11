@@ -283,13 +283,15 @@ async function pullFromCloud() {
                 location.reload();
             } else {
                 addLog("クラウドデータが不正です", "error");
-                alert("❌ クラウドデータの形式が正しくありません。");
+                alert("❌ クラウドデータの解析に失敗しました。PC側で「送信」が正しく完了しているか確認してください。");
             }
         } else {
             addLog(`クラウドからデータを取得できませんでした。ステータス: ${response.status}`, "error");
+            alert(`❌ クラウド接続エラー: ${response.status}`);
         }
     } catch (e) {
         addLog(`通信エラー: ${e.message}`, "error");
+        alert(`❌ 通信エラーが発生しました。ネット接続とGAS設定を確認してください。\n${e.message}`);
     }
     updateSyncStatus('success');
 }
@@ -719,7 +721,7 @@ function initApp() {
     // バージョンラベル更新
     const versionEl = document.getElementById('app-version-display');
     if (versionEl) {
-        versionEl.textContent = `Version: 20260311-1530`;
+        versionEl.textContent = `Version: 20260311-1540`;
     }
 
     // QRコードとURLシェア機能を初期化
