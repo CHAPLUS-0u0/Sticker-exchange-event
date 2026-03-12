@@ -359,11 +359,16 @@ async function silentSyncFromCloud() {
                 addLog(`[Sync] 更新検知 (Cloud:${new Date(cloudLastUpdated).toLocaleTimeString()} vs Local:${new Date(localLastUpdated).toLocaleTimeString()})`);
 
                 if (isAdminAuth) {
-                    // Mirror mode for Admin/iPad: Cloud is the source of truth (handles deletions)
-                    state.entries = cloudData.entries || [];
-                    state.sales = mergeCollections(state.sales || [], cloudData.sales || []);
-                    state.lastUpdated = cloudLastUpdated;
-                    addLog(`[Sync] Mirrored master data (${state.entries.length} items)`);
+                    // クラウドが完全に空（{}）の場合は、不用意な上書きを避けるためスキップ
+                    if (cloudData.entries || cloudData.sales || cloudLastUpdated > 0) {
+                        state.entries = cloudData.entries || [];
+                        state.sales = mergeCollections(state.sales || [], cloudData.sales || []);
+                        state.lastUpdated = cloudLastUpdated;
+                        addLog(`[Sync] Mirrored master data (${state.entries.length} items)`);
+                    } else {
+                        addLog("[Sync] Cloud data is empty, skipping mirror to prevent data loss.");
+                        return;
+                    }
                 } else {
                     // Merge mode for Guests: Add cloud entries to local list
                     const newEntries = mergeCollections(state.entries || [], cloudData.entries || []);
@@ -793,7 +798,7 @@ function initApp() {
     // バージョンラベル更新
     const versionEl = document.getElementById('app-version-display');
     if (versionEl) {
-        versionEl.textContent = `Version: 20260312-1115`;
+        versionEl.textContent = `Version: 20260312-1640`;
     }
 
     // ---- フローティング同期ボタン ----
