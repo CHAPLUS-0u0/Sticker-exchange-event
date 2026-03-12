@@ -467,6 +467,7 @@ function checkAccess() {
         switchView(null, 'registration-view', false); // 保存しない
     } else if (isAdminAuth) {
         // 管理者認証済み
+        document.body.classList.add('logged-in');
         document.getElementById('main-nav').classList.remove('hidden');
         const activeBtn = document.querySelector(`[data-target="${defaultAdminTab}"]`);
         switchView(activeBtn, defaultAdminTab, false); // 初期ロード時は再保存不要
