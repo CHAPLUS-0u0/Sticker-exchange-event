@@ -1068,3 +1068,47 @@ hr {
         transform: translateY(0);
     }
 }
+
+/* ----- フローティング同期ボタン ----- */
+#floating-sync-btn {
+    position: fixed;
+    bottom: 25px;
+    right: 25px;
+    width: 60px;
+    height: 60px;
+    background: linear-gradient(45deg, #ff80ab, #d2baff);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    font-size: 1.8rem;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(255, 128, 171, 0.5);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+#floating-sync-btn:active {
+    transform: scale(0.9);
+    box-shadow: 0 2px 8px rgba(255, 128, 171, 0.4);
+}
+
+#floating-sync-btn.spinning {
+    animation: spin 1s linear infinite;
+    pointer-events: none;
+    opacity: 0.8;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+/* 管理者以外、または特定のビューでは非表示にする制御 */
+body:not(.logged-in) #floating-sync-btn {
+    display: none;
+}

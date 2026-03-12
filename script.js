@@ -32,7 +32,7 @@ let state = {
     lastUpdated: 0
 };
 
-let isAdminAuth = sessionStorage.getItem('sticker_admin_auth') === 'true';
+let isAdminAuth = localStorage.getItem('sticker_admin_auth') === 'true';
 let currentCart = [];
 let debugLogs = [];
 
@@ -456,7 +456,7 @@ function checkAccess() {
     document.getElementById('login-modal').classList.add('hidden');
 
     // どの画面を表示するか判定
-    let defaultAdminTab = sessionStorage.getItem('sticker_last_view') || 'pos-view';
+    let defaultAdminTab = localStorage.getItem('sticker_last_view') || 'pos-view';
     // 不正な値やadmin-view(設定)以外への誘導を防ぐためのガード
     const validAdminTabs = ['pos-view', 'sales-view', 'product-admin-view', 'registration-view', 'reception-view', 'admin-view', 'data-management-view'];
     if (!validAdminTabs.includes(defaultAdminTab)) defaultAdminTab = 'pos-view';
@@ -491,7 +491,7 @@ function initApp() {
         }
         if (pw === state.settings.adminPassword || pw === 'admin') {
             isAdminAuth = true;
-            sessionStorage.setItem('sticker_admin_auth', 'true');
+            localStorage.setItem('sticker_admin_auth', 'true');
             window.history.replaceState({}, document.title, window.location.pathname + '?view=admin');
             checkAccess();
         } else {
@@ -503,7 +503,9 @@ function initApp() {
         document.getElementById('btn-logout').addEventListener('click', () => {
             if (confirm("ログアウトしますか？")) {
                 isAdminAuth = false;
-                sessionStorage.removeItem('sticker_admin_auth');
+                document.body.classList.remove('logged-in');
+                localStorage.removeItem('sticker_admin_auth');
+                localStorage.removeItem('sticker_last_view');
                 location.href = window.location.pathname; // TOPへ戻る
             }
         });
@@ -790,10 +792,23 @@ function initApp() {
     // バージョンラベル更新
     const versionEl = document.getElementById('app-version-display');
     if (versionEl) {
-        versionEl.textContent = `Version: 20260312-1056`;
+        versionEl.textContent = `Version: 20260312-1115`;
     }
 
-    // QRコードとURLシェア機能を初期化
+    // ---- フローティング同期ボタン ----
+    const floatingBtn = document.getElementById('floating-sync-btn');
+    if (floatingBtn) {
+        floatingBtn.addEventListener('click', async () => {
+            floatingBtn.classList.add('spinning');
+            addLog("手動同期を開始...");
+            await silentSyncFromCloud();
+            setTimeout(() => {
+                floatingBtn.classList.remove('spinning');
+                addLog("手動同期が完了しました。");
+            }, 1000);
+        });
+    }
+
     try {
         initShortUrlFeatures();
     } catch (e) {
@@ -944,7 +959,7 @@ function switchView(btn, targetId, shouldSave = true) {
         targetEl.classList.add('active');
         window.scrollTo(0, 0); // 切り替え時に上端に戻す
         if (shouldSave && isAdminAuth) {
-            sessionStorage.setItem('sticker_last_view', targetId);
+            localStorage.setItem('sticker_last_view', targetId);
         }
     }
 
