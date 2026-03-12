@@ -1,3 +1,15 @@
+// --- Error Handling ---
+window.onerror = function(msg, url, lineNo, columnNo, error) {
+    const message = `[JS Error] ${msg} at ${lineNo}:${columnNo}`;
+    if (typeof addLog === 'function') addLog(message, "error");
+    return false;
+};
+
+window.onunhandledrejection = function(event) {
+    const message = `[Promise Error] ${event.reason}`;
+    if (typeof addLog === 'function') addLog(message, "error");
+};
+
 // --- State Management ---
 let state = {
     entries: [],
@@ -13,7 +25,7 @@ let state = {
         completionNotice: "※今回は無料でご参加いただけますが、次回以降は有料になる可能性があります。\n※当日スムーズにご案内できるようご協力をお願いいたします！",
         topNotice: "ここにイベントのお知らせ案内が表示されます✨",
         topImage: "",
-        gasUrl: "https://script.google.com/macros/s/AKfycbxKqkvvSDLWc2M6NkxzyMJ9_8DWPspAfQWUB6fOi6gVRDRmgvW50V9jzrX1uNWDTa9k/exec",
+        gasUrl: "https://script.google.com/macros/s/AKfycbxLMhc9dFlyGLht4TeU7RzRzMwkFQTsBWIEhKzCE-M8b99kAl-lY6AOLv36VeEKzKs_/exec",
         adminPassword: "admin"
     },
     currentSlotFilter: 'all', // 初期値は「すべて」
@@ -109,9 +121,11 @@ async function loadData() {
             addLog("ローカルデータの解析に失敗しました。", "error");
         }
     }
-    // URLの強制復旧（空欄になってしまった環境への対策）
-    if (!state.settings.gasUrl || state.settings.gasUrl === "") {
-        state.settings.gasUrl = "https://script.google.com/macros/s/AKfycbxKqkvvSDLWc2M6NkxzyMJ9_8DWPspAfQWUB6fOi6gVRDRmgvW50V9jzrX1uNWDTa9k/exec";
+    // URLの強制復旧（新しいURLへ強制的に切り替える）
+    const CURRENT_GAS_URL = "https://script.google.com/macros/s/AKfycbxLMhc9dFlyGLht4TeU7RzRzMwkFQTsBWIEhKzCE-M8b99kAl-lY6AOLv36VeEKzKs_/exec";
+    if (!state.settings.gasUrl || state.settings.gasUrl.includes("AKfycbxKqkvvSDLWc2M6NkxzyMJ9")) {
+        state.settings.gasUrl = CURRENT_GAS_URL;
+        addLog("GAS URLを最新版に自動更新しました。");
     }
     if (!Array.isArray(state.entries)) state.entries = [];
     if (!Array.isArray(state.products)) state.products = [];
@@ -246,7 +260,7 @@ async function syncToCloud(isNotify = false, newEntry = null) {
         const response = await fetch(state.settings.gasUrl, {
             method: 'POST',
             mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'text/plain' },
             body: payload
         });
 
@@ -337,18 +351,12 @@ async function silentSyncFromCloud() {
                 const localLastUpdated = state.lastUpdated || 0;
 
                 // Time Difference Logic (v1590): Ignore if exactly same, otherwise check for newer cloud data.
-                // Removed the 5s buffer to allow immediate sync after PC push.
                 if (cloudLastUpdated === localLastUpdated) return;
 
-                if (cloudLastUpdated < localLastUpdated) {
-                    // Cloud is older (maybe waiting for PC push to complete)
-                    if (localLastUpdated - cloudLastUpdated > 60000) {
-                        addLog("[Wait] Cloud is outdated (waiting for PC push)");
-                    }
-                    return;
-                }
-
-                addLog("[Sync] New data detected. Updating...");
+                // 時刻の前後に関わらず、同期が必要なケース：
+                // 1. 一般ユーザー（Guest）は常に最新のクラウド情報をマージ
+                // 2. 管理者（Admin）でミラーモードの場合、クラウドに更新があれば取り込む
+                addLog(`[Sync] 更新検知 (Cloud:${new Date(cloudLastUpdated).toLocaleTimeString()} vs Local:${new Date(localLastUpdated).toLocaleTimeString()})`);
 
                 if (isAdminAuth) {
                     // Mirror mode for Admin/iPad: Cloud is the source of truth (handles deletions)
@@ -587,6 +595,36 @@ function initApp() {
         updateSettingsUI();
     });
 
+    // テストメール送信
+    if (document.getElementById('btn-test-email')) {
+        document.getElementById('btn-test-email').addEventListener('click', async () => {
+            const btn = document.getElementById('btn-test-email');
+            try {
+                btn.disabled = true;
+                btn.textContent = "⌛ 送信中...";
+                const testEntry = {
+                    id: "test_" + Date.now(),
+                    name: "テスト太郎",
+                    slotName: "テスト時間枠",
+                    number: "TEST-000",
+                    phone: "000-0000-0000",
+                    timestamp: new Date().toLocaleString()
+                };
+                const success = await syncToCloud(true, testEntry);
+                if (success) {
+                    alert("✅ テストデータをクラウドに送信しました。\n設定したメールアドレスに通知が届くか確認してください。");
+                } else {
+                    alert("❌ 送信に失敗しました。GAS URLやネット接続を確認してください。");
+                }
+            } catch (e) {
+                addLog(`Test email failed: ${e.message}`, "error");
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "📧 通知メールをテスト送信";
+            }
+        });
+    }
+
     // ---- データ・バックアップ復元 ----
     document.getElementById('btn-export-backup').addEventListener('click', () => {
         const dataStr = JSON.stringify(state, null, 2);
@@ -633,19 +671,22 @@ function initApp() {
         reader.readAsText(file);
     });
 
-    document.getElementById('btn-clear-all').addEventListener('click', () => {
-        if (confirm("名簿データ、売上、人数カウントをリセットします。商品情報は消えません。よろしいですか？")) {
+    document.getElementById('btn-clear-all').addEventListener('click', async () => {
+        if (confirm("【⚠️警告】名簿・売上・当日受付数をすべてリセットします。\nテストデータを消去して本番を始める際に使用してください。商品情報は消えません。\nクラウド同期もリセット（上書き）されます。よろしいですか？")) {
             state.entries = [];
             state.sales = [];
-            state.slotCounts = {}; // 確実にリセット
-            saveData();
-
-            // クラウド同期対応のため、少し待ってからリロード（またはUI直接クリア）
-            alert("リセットが完了しました✨");
-            updateReceptionList();
-            updatePOSCounterDisplay();
-            updateTodaySales();
-            if (typeof refreshPOS === 'function') refreshPOS();
+            state.slotCounts = {};
+            state.lastUpdated = Date.now();
+            
+            addLog("データの初期化中...");
+            const success = await saveData();
+            
+            if (success) {
+                alert("✅ 全データをリセットしました！\nクラウドも初期化されました。");
+            } else {
+                alert("⚠️ ローカルデータはリセットされましたが、クラウドへの同期に失敗しました。\nネット接続を確認してください。");
+            }
+            location.reload();
         }
     });
 
@@ -716,20 +757,6 @@ function initApp() {
         }
     });
 
-    const btnClearAll = document.getElementById('btn-clear-all');
-    if (btnClearAll) {
-        btnClearAll.addEventListener('click', () => {
-            if (confirm("【⚠️重要】名簿データと売上データを端末から完全に消去します。よろしいですか？\n(商品は消えません。PCのクラウド同期には影響しません)")) {
-                state.entries = [];
-                state.sales = [];
-                state.lastUpdated = Date.now();
-                saveData();
-                addLog("端末データをリセットしました。");
-                alert("✅ データをリセットしました。");
-                location.reload();
-            }
-        });
-    }
 
     // ---- 診断ログ機能 ----
     const btnCopyLog = document.getElementById('btn-copy-debug-log');
@@ -757,13 +784,13 @@ function initApp() {
     }
 
     // ---- 定期実行タイマー ----
-    // 30秒に一度、クラウドの最新情報を自動チェックする
-    setInterval(silentSyncFromCloud, 30000);
+    // 10秒に一度、クラウドの最新情報を自動チェックする
+    setInterval(silentSyncFromCloud, 10000);
 
     // バージョンラベル更新
     const versionEl = document.getElementById('app-version-display');
     if (versionEl) {
-        versionEl.textContent = `Version: 20260311-1610`;
+        versionEl.textContent = `Version: 20260312-1056`;
     }
 
     // QRコードとURLシェア機能を初期化
@@ -980,8 +1007,10 @@ async function handleRegistration(e) {
     e.preventDefault();
     const submitBtn = document.getElementById('btn-submit-registration');
     if (submitBtn) {
+        if (submitBtn.disabled) return; // 二重送信防止の念押し
         submitBtn.disabled = true;
-        submitBtn.textContent = '同期中...';
+        submitBtn.style.opacity = "0.7";
+        submitBtn.textContent = '🚀 送信中... (数秒かかります)';
     }
 
     // 1. 同期して最新の名簿にする（番号の重複を防ぐ）
@@ -994,23 +1023,33 @@ async function handleRegistration(e) {
     if (!selectedSlotId || !userName || !userPhone) {
         if (submitBtn) {
             submitBtn.disabled = false;
-            submitBtn.textContent = '💖 予約フォームへすすむ';
+            submitBtn.style.opacity = "1";
+            submitBtn.textContent = '✨ 予約する ✨';
         }
         return;
     }
 
-    const countInSlot = state.entries.filter(en => en.slotId === selectedSlotId).length;
-    if (countInSlot >= state.settings.capacityPerSlot) {
+    const existingInSlot = state.entries.filter(en => en.slotId === selectedSlotId);
+    if (existingInSlot.length >= (state.settings.capacityPerSlot || 20)) {
         alert("ごめんなさい！この時間枠は定員に達しました。");
-        populateSlotSelects(); // UI更新
+        populateSlotSelects();
         if (submitBtn) {
             submitBtn.disabled = false;
-            submitBtn.textContent = '💖 予約フォームへすすむ';
+            submitBtn.style.opacity = "1";
+            submitBtn.textContent = '✨ 予約する ✨';
         }
         return;
     }
 
-    const nextNum = countInSlot + 1;
+    let maxNum = 0;
+    existingInSlot.forEach(en => {
+        // "①-001" のような形式から数字部分を取り出す
+        const parts = en.number.split('-');
+        const n = parseInt(parts.length > 1 ? parts[1] : parts[0], 10);
+        if (!isNaN(n) && n > maxNum) maxNum = n;
+    });
+
+    const nextNum = maxNum + 1;
     const formattedNum = String(nextNum).padStart(3, '0');
     const displayNum = slots[selectedSlotId].prefix ? `${slots[selectedSlotId].prefix}-${formattedNum}` : formattedNum;
 
