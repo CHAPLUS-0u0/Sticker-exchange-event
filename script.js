@@ -65,20 +65,33 @@ const slots = {
 
 // --- Initialization ---
 document.addEventListener('DOMContentLoaded', async () => {
-    // 1. まずデータを読み込み（チラつき防止のため最優先）
-    await loadData();
+    try {
+        // 1. まずデータを読み込み（チラつき防止のため最優先）
+        await loadData();
 
-    // 2. アクセス判定と画面表示（この時点でデータがstateに入っている）
-    checkAccess();
+        // 2. アクセス判定と画面表示（この時点でデータがstateに入っている）
+        checkAccess();
 
-    // 3. サイレント同期（裏側で最新情報を取得）
-    silentSyncFromCloud();
+        // 3. サイレント同期（裏側で最新情報を取得）
+        silentSyncFromCloud();
 
-    // 4. イベントリスナーなどの初期化
-    initApp();
+        // 4. イベントリスナーなどの初期化
+        initApp();
 
-    // 4. 最終的な表示更新
-    refreshActiveView();
+        // 5. 最終的な表示更新
+        refreshActiveView();
+        
+        addLog("アプリが正常に起動しました");
+    } catch (err) {
+        console.error("Critical Init Error:", err);
+        const errorDiv = document.createElement('div');
+        errorDiv.style.cssText = "position:fixed; top:0; left:0; width:100%; background:#f44336; color:white; padding:15px; z-index:9999; font-size:0.8rem; overflow-y:auto; max-height:200px;";
+        errorDiv.innerHTML = `<strong>⚠️ 起動エラーが発生しました:</strong><br>${err.message}<br><small>${err.stack?.split('\n')[0]}</small>`;
+        document.body.prepend(errorDiv);
+        
+        // 診断ログ追加
+        if (typeof addLog === 'function') addLog(`起動エラー: ${err.message}`, "error");
+    }
 });
 
 /**
@@ -532,16 +545,19 @@ function initApp() {
     }
 
     // ログインモーダル外側クリックで閉じる（ログインキャンセル）
-    document.getElementById('login-modal').addEventListener('click', (e) => {
-        if (e.target.id === 'login-modal') {
-            e.target.classList.add('hidden');
-            // 管理者ページを直接叩いた場合はTOPに戻す
-            const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.get('view') === 'admin') {
-                window.history.replaceState({}, document.title, window.location.pathname);
+    const loginModal = document.getElementById('login-modal');
+    if (loginModal) {
+        loginModal.addEventListener('click', (e) => {
+            if (e.target.id === 'login-modal') {
+                e.target.classList.add('hidden');
+                // 管理者ページを直接叩いた場合はTOPに戻す
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.get('view') === 'admin') {
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
             }
-        }
-    });
+        });
+    }
 
     // ---- ナビゲーション ----
     document.querySelectorAll('.nav-btn').forEach(btn => {
@@ -554,34 +570,40 @@ function initApp() {
     // ---- 設定タブ関連 ----
     updateSettingsUI();
     applySettingsToInputs(); // 初回起動時のみ入力を同期
-    document.getElementById('btn-save-settings').addEventListener('click', () => {
-        state.settings.eventName = document.getElementById('setting-event-name').value;
-        state.settings.eventDate = document.getElementById('setting-event-date').value;
-        state.settings.hpUrl = document.getElementById('setting-hp-url').value;
-        state.settings.topNotice = document.getElementById('setting-top-notice').value;
-        state.settings.formNotice = document.getElementById('setting-form-notice').value;
-        state.settings.completionNotice = document.getElementById('setting-completion-notice').value;
-        state.settings.gasUrl = document.getElementById('setting-gas-url').value;
-        saveData();
-        updateSettingsUI();
-        applySettingsToInputs(); // 保存後に再同期
+    const btnSaveSettings = document.getElementById('btn-save-settings');
+    if (btnSaveSettings) {
+        btnSaveSettings.addEventListener('click', () => {
+            state.settings.eventName = document.getElementById('setting-event-name').value;
+            state.settings.eventDate = document.getElementById('setting-event-date').value;
+            state.settings.hpUrl = document.getElementById('setting-hp-url').value;
+            state.settings.topNotice = document.getElementById('setting-top-notice').value;
+            state.settings.formNotice = document.getElementById('setting-form-notice').value;
+            state.settings.completionNotice = document.getElementById('setting-completion-notice').value;
+            state.settings.gasUrl = document.getElementById('setting-gas-url').value;
+            saveData();
+            updateSettingsUI();
+            applySettingsToInputs(); // 保存後に再同期
 
-        const btnSave = document.getElementById('btn-save-settings');
-        const originalText = btnSave.textContent;
-        btnSave.textContent = "✅ 設定を保存しました";
-        btnSave.classList.add('btn-success');
-        setTimeout(() => {
-            btnSave.textContent = originalText;
-            btnSave.classList.remove('btn-success');
-        }, 2000);
-    });
+            const originalText = btnSaveSettings.textContent;
+            btnSaveSettings.textContent = "✅ 設定を保存しました";
+            btnSaveSettings.classList.add('btn-success');
+            setTimeout(() => {
+                btnSaveSettings.textContent = originalText;
+                btnSaveSettings.classList.remove('btn-success');
+            }, 2000);
+        });
+    }
 
-    document.getElementById('btn-force-sync').addEventListener('click', forceSyncToCloud);
-    document.getElementById('id-pull-sync').addEventListener('click', pullFromCloud);
+    const btnForceSync = document.getElementById('btn-force-sync');
+    if (btnForceSync) btnForceSync.addEventListener('click', forceSyncToCloud);
+    const btnPullSync = document.getElementById('id-pull-sync');
+    if (btnPullSync) btnPullSync.addEventListener('click', pullFromCloud);
 
     // TOP画像アップロード処理
-    document.getElementById('setting-top-img').addEventListener('change', async (e) => {
-        const file = e.target.files[0];
+    const topImgInput = document.getElementById('setting-top-img');
+    if (topImgInput) {
+        topImgInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
         if (file) {
             try {
                 // 画像をさらに小さく圧縮 (600px / 品質 0.5) して保存
@@ -596,12 +618,17 @@ function initApp() {
             }
         }
     });
+}
 
-    document.getElementById('btn-clear-top-img').addEventListener('click', () => {
-        state.settings.topImage = "";
-        document.getElementById('setting-top-img').value = "";
-        updateSettingsUI();
-    });
+    const btnClearTopImg = document.getElementById('btn-clear-top-img');
+    if (btnClearTopImg) {
+        btnClearTopImg.addEventListener('click', () => {
+            state.settings.topImage = "";
+            const topImgInput = document.getElementById('setting-top-img');
+            if (topImgInput) topImgInput.value = "";
+            updateSettingsUI();
+        });
+    }
 
     // テストメール送信
     if (document.getElementById('btn-test-email')) {
@@ -634,69 +661,78 @@ function initApp() {
     }
 
     // ---- データ・バックアップ復元 ----
-    document.getElementById('btn-export-backup').addEventListener('click', () => {
-        const dataStr = JSON.stringify(state, null, 2);
-        const blob = new Blob([dataStr], { type: 'application/json' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        const dateStr = new Date().toISOString().slice(0, 10);
-        a.download = `sticker_exchange_backup_${dateStr}.json`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-    });
+    const btnExportBackup = document.getElementById('btn-export-backup');
+    if (btnExportBackup) {
+        btnExportBackup.addEventListener('click', () => {
+            const dataStr = JSON.stringify(state, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            const dateStr = new Date().toISOString().slice(0, 10);
+            a.download = `sticker_exchange_backup_${dateStr}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        });
+    }
 
-    document.getElementById('input-import-backup').addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (!file) return;
+    const importBackupInput = document.getElementById('input-import-backup');
+    if (importBackupInput) {
+        importBackupInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
 
-        if (!confirm("データを復元すると、現在のiPad(この端末)の中身は全て消えてバックアップの内容に上書きされます。よろしいですか？")) {
-            e.target.value = ''; // 選択クリア
-            return;
-        }
+            if (!confirm("データを復元すると、現在のiPad(この端末)の中身は全て消えてバックアップの内容に上書きされます。よろしいですか？")) {
+                e.target.value = ''; // 選択クリア
+                return;
+            }
 
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-            try {
-                const importedData = JSON.parse(evt.target.result);
-                // 簡単なデータ整合性チェック
-                if (importedData && typeof importedData === 'object' && importedData.settings) {
-                    state = importedData;
-                    saveData();
-                    alert("✅ データの復元が完了しました！\n画面を再読み込みします。");
-                    location.reload();
-                } else {
-                    alert('❌ 無効なデータファイルです。シール交換会アプリのバックアップファイルを選んでください。');
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                try {
+                    const importedData = JSON.parse(evt.target.result);
+                    // 簡単なデータ整合性チェック
+                    if (importedData && typeof importedData === 'object' && importedData.settings) {
+                        state = importedData;
+                        saveData();
+                        alert("✅ データの復元が完了しました！\n画面を再読み込みします。");
+                        location.reload();
+                    } else {
+                        alert('❌ 無効なデータファイルです。シール交換会アプリのバックアップファイルを選んでください。');
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert("❌ ファイルの読み込み中にエラーが発生しました。");
                 }
-            } catch (err) {
-                console.error(err);
-                alert("❌ ファイルの読み込み中にエラーが発生しました。");
-            }
-            e.target.value = ''; // リセット
-        };
-        reader.readAsText(file);
-    });
+                e.target.value = ''; // リセット
+            };
+            reader.readAsText(file);
+        });
+    }
 
-    document.getElementById('btn-clear-all').addEventListener('click', async () => {
-        if (confirm("【⚠️警告】名簿・売上・当日受付数をすべてリセットします。\nテストデータを消去して本番を始める際に使用してください。商品情報は消えません。\nクラウド同期もリセット（上書き）されます。よろしいですか？")) {
-            state.entries = [];
-            state.sales = [];
-            state.slotCounts = {};
-            state.lastUpdated = Date.now();
-            
-            addLog("データの初期化中...");
-            const success = await saveData();
-            
-            if (success) {
-                alert("✅ 全データをリセットしました！\nクラウドも初期化されました。");
-            } else {
-                alert("⚠️ ローカルデータはリセットされましたが、クラウドへの同期に失敗しました。\nネット接続を確認してください。");
+    const btnClearAll = document.getElementById('btn-clear-all');
+    if (btnClearAll) {
+        btnClearAll.addEventListener('click', async () => {
+            if (confirm("【⚠️警告】名簿・売上・当日受付数をすべてリセットします。\nテストデータを消去して本番を始める際に使用してください。商品情報は消えません。\nクラウド同期もリセット（上書き）されます。よろしいですか？")) {
+                state.entries = [];
+                state.sales = [];
+                state.slotCounts = {};
+                state.lastUpdated = Date.now();
+                
+                addLog("データの初期化中...");
+                const success = await saveData();
+                
+                if (success) {
+                    alert("✅ 全データをリセットしました！\nクラウドも初期化されました。");
+                } else {
+                    alert("⚠️ ローカルデータはリセットされましたが、クラウドへの同期に失敗しました。\nネット接続を確認してください。");
+                }
+                location.reload();
             }
-            location.reload();
-        }
-    });
+        });
+    }
 
     // 本当に全て（商品含め）消したい場合用の隠し機能（コンソール用など）
     window.fullReset = () => {
@@ -709,13 +745,20 @@ function initApp() {
     // ---- 予約フォーム ----
     populateSlotSelects();
     const regForm = document.getElementById('registration-form');
-    regForm.addEventListener('submit', handleRegistration);
-    document.getElementById('btn-reset-form').addEventListener('click', () => {
-        document.getElementById('registration-result').classList.add('hidden');
-        document.getElementById('registration-form').classList.remove('hidden');
-        regForm.reset();
-        window.scrollTo(0, 0);
-    });
+    if (regForm) {
+        regForm.addEventListener('submit', handleRegistration);
+    }
+    const btnResetForm = document.getElementById('btn-reset-form');
+    if (btnResetForm) {
+        btnResetForm.addEventListener('click', () => {
+            const resResult = document.getElementById('registration-result');
+            const regFormEl = document.getElementById('registration-form');
+            if (resResult) resResult.classList.add('hidden');
+            if (regFormEl) regFormEl.classList.remove('hidden');
+            if (regForm) regForm.reset();
+            window.scrollTo(0, 0);
+        });
+    }
 
     // 「トップへ戻る」ボタン全てのイベント
     document.querySelectorAll('.btn-back-to-top').forEach(btn => {
@@ -727,16 +770,22 @@ function initApp() {
     });
 
     // ---- 受付（名簿）タブ ----
-    document.getElementById('search-input').addEventListener('input', updateReceptionList);
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) searchInput.addEventListener('input', updateReceptionList);
     const hideCheckedInCb = document.getElementById('filter-hide-checked-in');
     if (hideCheckedInCb) {
         hideCheckedInCb.addEventListener('change', updateReceptionList);
     }
-    document.getElementById('btn-export-csv').addEventListener('click', exportCSV);
-    document.getElementById('btn-export-reception-csv').addEventListener('click', exportCSV);
-    document.getElementById('btn-export-sales-csv').addEventListener('click', exportSalesCSV);
-    document.getElementById('btn-generate-test').addEventListener('click', generateTestData);
-    document.getElementById('btn-generate-test-products').addEventListener('click', generateTestProducts);
+    const btnExportCsv = document.getElementById('btn-export-csv');
+    if (btnExportCsv) btnExportCsv.addEventListener('click', exportCSV);
+    const btnExportReceptionCsv = document.getElementById('btn-export-reception-csv');
+    if (btnExportReceptionCsv) btnExportReceptionCsv.addEventListener('click', exportCSV);
+    const btnExportSalesCsv = document.getElementById('btn-export-sales-csv');
+    if (btnExportSalesCsv) btnExportSalesCsv.addEventListener('click', exportSalesCSV);
+    const btnGenerateTest = document.getElementById('btn-generate-test');
+    if (btnGenerateTest) btnGenerateTest.addEventListener('click', generateTestData);
+    const btnGenerateTestProducts = document.getElementById('btn-generate-test-products');
+    if (btnGenerateTestProducts) btnGenerateTestProducts.addEventListener('click', generateTestProducts);
 
     // ---- 商品管理タブ ----
     initProductAdmin();
@@ -745,9 +794,12 @@ function initApp() {
     initPOS();
 
     // ---- 番号チェック連携 ----
-    document.getElementById('btn-pos-check-number').addEventListener('click', handleNumberCheck);
+    const btnPosCheckNum = document.getElementById('btn-pos-check-number');
+    if (btnPosCheckNum) btnPosCheckNum.addEventListener('click', handleNumberCheck);
 
-    document.getElementById('btn-clear-old-sales').addEventListener('click', () => {
+    const btnClearOldSales = document.getElementById('btn-clear-old-sales');
+    if (btnClearOldSales) {
+        btnClearOldSales.addEventListener('click', () => {
         if (confirm("24時間以上前の古い売上履歴を削除して、保存容量を確保しますか？\n(本日の最新データは消えません)")) {
             const now = Date.now();
             const oneDayInMs = 24 * 60 * 60 * 1000;
@@ -764,6 +816,7 @@ function initApp() {
             alert(`整理完了しました。(${originalCount - state.sales.length}件を削除)`);
         }
     });
+}
 
 
     // ---- 診断ログ機能 ----
@@ -798,7 +851,7 @@ function initApp() {
     // バージョンラベル更新
     const versionEl = document.getElementById('app-version-display');
     if (versionEl) {
-        versionEl.textContent = `Version: 20260312-1640`;
+        versionEl.textContent = `Version: 20260312-1815`;
     }
 
     // ---- フローティング同期ボタン ----
@@ -996,8 +1049,10 @@ function switchView(btn, targetId, shouldSave = true) {
 function populateSlotSelects() {
     const regSlot = document.getElementById('reg-slot');
     const posSlot = document.getElementById('pos-slot-select');
-    regSlot.innerHTML = '<option value="">選択してください</option>';
-    posSlot.innerHTML = '';
+    if (regSlot) regSlot.innerHTML = '<option value="">選択してください</option>';
+    if (posSlot) posSlot.innerHTML = '';
+
+    if (!regSlot || !posSlot) return;
 
     Object.keys(slots).forEach(key => {
         const slot = slots[key];
@@ -1114,25 +1169,35 @@ function initProductAdmin() {
     const imgPreview = document.getElementById('prod-img-preview');
     const btnAdd = document.getElementById('btn-add-product');
 
-    imgInput.addEventListener('change', async (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = async function (event) {
-                const rawBase64 = event.target.result;
-                // 画像を圧縮してから保存 (400px / 0.4品質でクラウド制限内に収める)
-                pendingImageBase64 = await compressImageBase64(rawBase64, 400, 0.4);
-                imgPreview.src = pendingImageBase64;
-                imgPreview.style.display = 'block';
-            };
-            reader.readAsDataURL(file);
-        }
-    });
+    if (imgInput) {
+        imgInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = async function (event) {
+                    const rawBase64 = event.target.result;
+                    // 画像を圧縮してから保存 (400px / 0.4品質でクラウド制限内に収める)
+                    pendingImageBase64 = await compressImageBase64(rawBase64, 400, 0.4);
+                    if (imgPreview) {
+                        imgPreview.src = pendingImageBase64;
+                        imgPreview.style.display = 'block';
+                    }
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
 
-    btnAdd.addEventListener('click', () => {
-        const id = document.getElementById('prod-id-editing').value;
-        const name = document.getElementById('prod-name').value.trim();
-        const price = parseInt(document.getElementById('prod-price').value);
+    if (btnAdd) {
+        btnAdd.addEventListener('click', () => {
+            const nameEl = document.getElementById('prod-name');
+            const priceEl = document.getElementById('prod-price');
+            const editingIdEl = document.getElementById('prod-id-editing');
+            if (!nameEl || !priceEl || !editingIdEl) return;
+
+            const id = editingIdEl.value;
+            const name = nameEl.value.trim();
+            const price = parseInt(priceEl.value);
 
         if (!name || isNaN(price)) {
             alert("商品名と値段を正しく入力してください");
@@ -1183,6 +1248,7 @@ function initProductAdmin() {
             alert(id ? "商品を更新しました✨" : "商品を追加しました✨");
         }, 300);
     });
+}
 }
 
 function updateAdminProductList() {
@@ -1247,87 +1313,108 @@ window.deleteProduct = function (id) {
 function initPOS() {
     const slotSelect = document.getElementById('pos-slot-select');
 
+    if (!slotSelect) return;
+
     // スロット変更時
     slotSelect.addEventListener('change', () => {
         updatePOSCounterDisplay();
     });
 
     // カウンター
-    document.getElementById('btn-count-minus').addEventListener('click', () => {
-        const slotId = slotSelect.value;
-        if (!state.slotCounts[slotId]) state.slotCounts[slotId] = 0;
-        if (state.slotCounts[slotId] > 0) state.slotCounts[slotId]--;
-        saveData();
-        updatePOSCounterDisplay();
-    });
+    const btnMinus = document.getElementById('btn-count-minus');
+    if (btnMinus) {
+        btnMinus.addEventListener('click', () => {
+            const slotId = slotSelect.value;
+            if (!state.slotCounts[slotId]) state.slotCounts[slotId] = 0;
+            if (state.slotCounts[slotId] > 0) state.slotCounts[slotId]--;
+            saveData();
+            updatePOSCounterDisplay();
+        });
+    }
 
-    document.getElementById('btn-count-plus').addEventListener('click', () => {
-        const slotId = slotSelect.value;
-        if (!state.slotCounts[slotId]) state.slotCounts[slotId] = 0;
-        state.slotCounts[slotId]++;
-        saveData();
-        updatePOSCounterDisplay();
-    });
+    const btnPlus = document.getElementById('btn-count-plus');
+    if (btnPlus) {
+        btnPlus.addEventListener('click', () => {
+            const slotId = slotSelect.value;
+            if (!state.slotCounts[slotId]) state.slotCounts[slotId] = 0;
+            state.slotCounts[slotId]++;
+            saveData();
+            updatePOSCounterDisplay();
+        });
+    }
 
     // 手入力の追加
-    document.getElementById('btn-add-manual').addEventListener('click', () => {
-        const nameInput = document.getElementById('pos-manual-name').value.trim();
-        const priceInput = parseInt(document.getElementById('pos-manual-price').value, 10);
-        if (isNaN(priceInput) || priceInput < 0) {
-            alert("正しい金額を入力してください");
-            return;
-        }
+    const btnAddManual = document.getElementById('btn-add-manual');
+    if (btnAddManual) {
+        btnAddManual.addEventListener('click', () => {
+            const nameInput = document.getElementById('pos-manual-name').value.trim();
+            const priceInput = parseInt(document.getElementById('pos-manual-price').value, 10);
+            if (isNaN(priceInput) || priceInput < 0) {
+                alert("正しい金額を入力してください");
+                return;
+            }
 
-        const name = nameInput || "手入力商品";
-        currentCart.push({
-            id: 'manual_' + Date.now(),
-            name: name,
-            price: priceInput,
-            qty: 1
+            const name = nameInput || "手入力商品";
+            currentCart.push({
+                id: 'manual_' + Date.now(),
+                name: name,
+                price: priceInput,
+                qty: 1
+            });
+
+            document.getElementById('pos-manual-name').value = '';
+            document.getElementById('pos-manual-price').value = '';
+            updateCartUI();
         });
-
-        document.getElementById('pos-manual-name').value = '';
-        document.getElementById('pos-manual-price').value = '';
-        updateCartUI();
-    });
+    }
 
     // カートクリア
-    document.getElementById('btn-cart-clear').addEventListener('click', () => {
-        currentCart = [];
-        document.getElementById('cart-tendered-amount').value = '';
-        updateCartUI();
-    });
+    const btnCartClear = document.getElementById('btn-cart-clear');
+    if (btnCartClear) {
+        btnCartClear.addEventListener('click', () => {
+            currentCart = [];
+            const tenderedInput = document.getElementById('cart-tendered-amount');
+            if (tenderedInput) tenderedInput.value = '';
+            updateCartUI();
+        });
+    }
 
     // お預かり金額の入力監視
-    document.getElementById('cart-tendered-amount').addEventListener('input', updateChangeCalculation);
+    const tenderedInput = document.getElementById('cart-tendered-amount');
+    if (tenderedInput) {
+        tenderedInput.addEventListener('input', updateChangeCalculation);
+    }
 
     // 会計
-    document.getElementById('btn-checkout').addEventListener('click', () => {
-        if (currentCart.length === 0) return;
+    const btnCheckout = document.getElementById('btn-checkout');
+    if (btnCheckout) {
+        btnCheckout.addEventListener('click', () => {
+            if (currentCart.length === 0) return;
 
-        const total = currentCart.reduce((sum, item) => sum + (item.price * item.qty), 0);
+            const total = currentCart.reduce((sum, item) => sum + (item.price * item.qty), 0);
 
-        const sale = {
-            id: 'sale_' + Date.now(),
-            timestamp: new Date().toLocaleString(),
-            items: [...currentCart],
-            total: total
-        };
+            const sale = {
+                id: 'sale_' + Date.now(),
+                timestamp: new Date().toLocaleString(),
+                items: [...currentCart],
+                total: total
+            };
 
-        state.sales.push(sale);
-        saveData();
+            state.sales.push(sale);
+            saveData();
 
-        const tenderedInput = document.getElementById('cart-tendered-amount');
-        const tendered = parseInt(tenderedInput.value);
-        const changeText = (!isNaN(tendered) && tendered > total) ? `\nお預かり: ¥${tendered}\nおつり: ¥${tendered - total}` : `\nお渡し: 丁度 (¥${total})`;
+            const tenderedInputEl = document.getElementById('cart-tendered-amount');
+            const tendered = tenderedInputEl ? parseInt(tenderedInputEl.value) : NaN;
+            const changeText = (!isNaN(tendered) && tendered > total) ? `\nお預かり: ¥${tendered}\nおつり: ¥${tendered - total}` : `\nお渡し: 丁度 (¥${total})`;
 
-        currentCart = [];
-        tenderedInput.value = '';
-        updateCartUI();
-        updateSalesHistoryUI(); // 履歴を更新
-        updateTodaySales(); // 今日の売上を更新
-        alert(`会計完了しました！\n合計: ¥${total}${changeText}`);
-    });
+            currentCart = [];
+            if (tenderedInputEl) tenderedInputEl.value = '';
+            updateCartUI();
+            updateSalesHistoryUI(); // 履歴を更新
+            updateTodaySales(); // 今日の売上を更新
+            alert(`会計完了しました！\n合計: ¥${total}${changeText}`);
+        });
+    }
 }
 
 function refreshPOS() {
@@ -1804,9 +1891,13 @@ function updateReceptionList() {
     }
 
     // ソート
-    const sortedEntries = [...state.entries].sort((a, b) => {
-        if (a.slotId !== b.slotId) return a.slotId.localeCompare(b.slotId);
-        return a.number.localeCompare(b.number);
+    const sortedEntries = [...state.entries].filter(e => e).sort((a, b) => {
+        const slotA = a.slotId || "";
+        const slotB = b.slotId || "";
+        if (slotA !== slotB) return slotA.localeCompare(slotB);
+        const numA = a.number || "";
+        const numB = b.number || "";
+        return numA.localeCompare(numB);
     });
 
     // フィルター (スロット + 検索ワード + 受付済かどうか)
@@ -1943,30 +2034,8 @@ function downloadBlob(csvContent, filename) {
 
 // recalculateSlotCounts は予約分と当日分を混同するため廃止しました
 
-// --- テスト商品生成 (保存容量を節約するため少なめに) ---
-function generateTestProducts() {
-    const testDescs = [
-        { name: "キラキラシール", price: 300, color1: "#FF7043", color2: "#FFCCBC" },
-        { name: "お花セット", price: 500, color1: "#66BB6A", color2: "#C8E6C9" },
-        { name: "ワンちゃん", price: 200, color1: "#42A5F5", color2: "#BBDEFB" },
-        { name: "ねこさん", price: 250, color1: "#AB47BC", color2: "#E1BEEF" }
-    ];
+// generateTestProducts は 1698行目付近の定義を使用するため、ここは削除します
 
-    testDescs.forEach(d => {
-        const svg = `data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='100' height='100'><rect width='100' height='100' fill='${encodeURIComponent(d.color1)}'/><circle cx='50' cy='50' r='30' fill='${encodeURIComponent(d.color2)}'/></svg>`;
-        state.products.push({
-            id: 'prod_' + Math.random().toString(36).substr(2, 9),
-            name: d.name,
-            price: d.price,
-            image: svg
-        });
-    });
-
-    saveData();
-    updateAdminProductList();
-    if (typeof refreshPOS === 'function') refreshPOS();
-    alert("テスト商品を4件追加しました✨");
-}
 
 function generateQRCode(container, text) {
     if (typeof QRCode === 'undefined') {
